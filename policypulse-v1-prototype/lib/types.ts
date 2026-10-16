@@ -1,0 +1,1 @@
+export type Policy = { id:string; customerName:string; phone:string; email:string; policyNumber:string; insurer:string; policyType:string; startDate:string; expiryDate:string; premium:number; sourceFile:string; sourceSheet:string; sourceRow:number; importedAt:string };

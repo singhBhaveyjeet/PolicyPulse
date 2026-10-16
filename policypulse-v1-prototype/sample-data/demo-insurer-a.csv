@@ -1,0 +1,4 @@
+Customer Name,Mobile No,Email,Policy No,Insurance Company,Policy Type,Start Date,Expiry Date,Premium Amount
+Aarav Demo,9000000101,aarav.demo@example.test,DEMO-MTR-0001,HDFC ERGO,Motor,2025-10-20,2026-10-20,14500
+Mira Sample,9000000102,mira.sample@example.test,DEMO-HLT-0002,ICICI Lombard,Health,2025-11-02,2026-10-25,22000
+Karan Example,9000000103,karan.example@example.test,DEMO-LIF-0003,LIC,Life,2024-05-12,2026-12-01,40000
