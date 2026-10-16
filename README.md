@@ -1,0 +1,1 @@
+A systematic website for Insurance Agents, allowing analysis of data from different firms. It has integrated AI assist. Tracks all the record added and provide an alert system from most critical to least.
