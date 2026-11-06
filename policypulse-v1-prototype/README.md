@@ -11,10 +11,12 @@ A local, presentation-ready prototype for an insurance data intelligence dashboa
 - Map spreadsheet headers to PolicyPulse canonical fields and import rows into the current browser session.
 - Open policy details and see source file, worksheet and row provenance.
 - Customer directory, import history, export filtered results to Excel, responsive layout.
+- Browser-only demo login and signup flows that connect the landing page to the dashboard.
 
 ## Important limitations
 - Imported rows exist only in browser memory. Refreshing resets them.
-- No login, backend, PostgreSQL, multi-user sharing, messaging or AI integration yet.
+- Login/signup are demo-only: no real account is created, passwords are not stored or verified, and access is kept in the current browser tab only.
+- No backend, PostgreSQL, production authentication, multi-user sharing, messaging or AI integration yet.
 - Use synthetic data only. Never upload real policyholder personal, financial, health, Aadhaar or PAN data to this demo.
 - This is a prototype for demonstration, not a production insurance system.
 
@@ -42,6 +44,8 @@ Build check: `npm run build`
 2. Click a row to view policy details and source provenance.
 3. Click **Import data**, choose `sample-data/demo-insurer-a.csv`, verify mappings and import.
 4. Export the filtered view to an Excel file.
+
+To open the workspace from the landing page, choose **Create demo access** or **Log in**, enter an email and any demo-only password with at least 8 characters, then continue. Either flow grants demo access; the password is not checked against an account.
 
 ## Canonical fields
 `customer_name`, `phone`, `email`, `policy_number`, `insurer`, `policy_type`, `start_date`, `expiry_date`, `premium`.

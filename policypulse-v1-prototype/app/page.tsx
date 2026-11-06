@@ -75,7 +75,7 @@ export default function HomePage() {
         </nav>
 
         <div className={styles.navActions}>
-          <a className={styles.signIn} href="/dashboard">Open workspace <ArrowRight size={15} /></a>
+          <a className={styles.signIn} href="/login">Log in <ArrowRight size={15} /></a>
           <button className={styles.menuButton} onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? "Close menu" : "Open menu"}>
             {menuOpen ? <X size={21} /> : <Menu size={21} />}
           </button>
@@ -91,7 +91,7 @@ export default function HomePage() {
             Catch renewals early. Find customer details fast. Stay one step ahead.
           </p>
           <div className={styles.heroActions}>
-            <a className={styles.primaryButton} href="/dashboard">Explore PolicyPulse <ArrowRight size={17} /></a>
+            <a className={styles.primaryButton} href="/signup">Create demo access <ArrowRight size={17} /></a>
             <a className={styles.textButton} href="#how-it-works">See how it works <ArrowDownRight size={17} /></a>
           </div>
           <div className={styles.trustLine}>
@@ -182,7 +182,7 @@ export default function HomePage() {
           <div className={styles.eyebrow}>A SIMPLE, BETTER FLOW</div>
           <h2>From scattered files<br />to <span className={styles.gradientText}>in-control.</span></h2>
           <p>No complicated setup. No new spreadsheet habits to learn. Just a clearer way to work with the information you already have.</p>
-          <a href="/dashboard" className={styles.primaryButton}>Get started <ArrowRight size={17} /></a>
+          <a href="/signup" className={styles.primaryButton}>Get started <ArrowRight size={17} /></a>
         </div>
         <div className={`${styles.steps} ${styles.reveal}`} data-reveal>
           <div className={styles.stepLine} />
@@ -195,7 +195,7 @@ export default function HomePage() {
       <section className={`${styles.security} ${styles.reveal}`} id="security" data-reveal>
         <div className={styles.securityIcon}><ShieldCheck size={24} /></div>
         <div><span className={styles.eyebrow}>BUILT AROUND YOUR DATA</span><h2>Clarity should come with care.</h2><p>PolicyPulse is designed to make policy information easier to manage. Review your data and access settings carefully before using real customer records.</p></div>
-        <a href="/dashboard" className={styles.outlineButton}>Explore workspace <ArrowRight size={16} /></a>
+        <a href="/signup" className={styles.outlineButton}>Explore workspace <ArrowRight size={16} /></a>
       </section>
 
       <footer className={styles.footer}>

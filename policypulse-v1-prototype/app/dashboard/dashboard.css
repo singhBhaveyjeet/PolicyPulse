@@ -1,0 +1,25 @@
+.auth-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: #0a1620;
+  color: #a9bac0;
+  font-size: 13px;
+}
+
+.sign-out {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: #718096;
+}
+
+.sign-out:hover {
+  color: #cf4f4f;
+  background: #fff7f6;
+}
