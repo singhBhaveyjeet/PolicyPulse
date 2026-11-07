@@ -1,0 +1,8 @@
+HDFC ERGO - Renewal list (generated report)
+
+Sr No,Insured Name,Mobile No,E-mail,Policy No.,Policy Type,Policy Start Date,Policy Expiry Date,Premium Amount
+1,Aarav Demo,+91 90000-00101,aarav.demo@example.test,DEMO-MTR-0001,Two Wheeler,12/11/2025,11/11/2026,"Rs. 14,500/-"
+2,Mira Sample,9000000102,mira.sample@example.test,DEMO-HLT-0002,Mediclaim,25-Nov-2025,24-Nov-2026,"22,000"
+3,Karan Example,9000000103,karan.example@example.test,DEMO-LIF-0003,Term Life,12/05/2024,01/12/2026,40000
+4,Nisha Test,9000000105,,DEMO-MTR-0005,Car,15/11/2025,20/12/2026,"17,500"
+5,,9000000106,missing.name@example.test,DEMO-MTR-0006,Car,15/11/2025,20/12/2026,"9,000"

@@ -1,0 +1,4 @@
+customer_name,phone,email,policy_number,insurer,policy_type,start_date,expiry_date,premium
+Aarav Demo,+91 9000000101,aarav.demo@example.test,DEMO-HLT-0004,ICICI Lombard,Health,2025-12-01,2026-12-01,28000
+Rohan Sample,9000000107,rohan.sample@example.test,DEMO-HLT-0007,ICICI Lombard,Health,2025-11-20,2026-11-20,31000
+Nisha Test,9000000105,nisha.test@example.test,DEMO-MTR-0005,Tata AIG,Motor,2025-12-21,2027-12-20,18200
