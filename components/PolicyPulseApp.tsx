@@ -11,7 +11,7 @@ import { downloadJSON, downloadTemplate, exportPolicies } from "@/lib/importer";
 import { DEFAULT_SETTINGS, EMPTY_PROFILE, mergeProfile, mergeSettings } from "@/lib/settings";
 import {
   FOLLOW_UP_LABEL, buildInsights, computeStats, dateLabel, daysLeft, dueText, expiryTimeline, groupCustomers, initials, isOpen, money,
-  compactMoney, statusOf, whatsappLink, STATUS_ORDER,
+  compactMoney, customerKey, statusOf, whatsappLink, STATUS_ORDER,
 } from "@/lib/analysis";
 import { cleanPhone, textKey } from "@/lib/normalize";
 import ImportModal, { type ImportSummary } from "./ImportModal";
@@ -39,7 +39,7 @@ type Toast = { id: number; msg: string; tone: "ok" | "error" };
 const prettyName = (email: string) =>
   (email.split("@")[0] || "there").replace(/[._-]+/g, " ").replace(/\w\S*/g, (w) => w[0].toUpperCase() + w.slice(1));
 
-export default function PolicyPulseApp({ userEmail, onSignOut }: { userEmail: string; onSignOut: () => void }) {
+export default function PolicyPulseApp({ userEmail, onSignOutAction }: { userEmail: string; onSignOutAction: () => void }) {
   // ---- workspace (saved on this device) ----
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [imports, setImports] = useState<ImportRecord[]>([]);
@@ -178,6 +178,14 @@ export default function PolicyPulseApp({ userEmail, onSignOut }: { userEmail: st
     setPolicies((prev) => prev.filter((x) => x.id !== p.id));
     setSelectedId(null);
   }
+    function deleteCustomer(name: string, ids: string[]) {
+    const n = ids.length;
+    if (!window.confirm(`Delete ${name} and ${n === 1 ? "their 1 policy" : `all ${n} of their policies`}? This cannot be undone.`)) return;
+    const gone = new Set(ids);
+    setPolicies((prev) => prev.filter((p) => !gone.has(p.id)));
+    setSelectedId(null);
+    notify(`Deleted ${name} and ${n} ${n === 1 ? "policy" : "policies"}.`);
+  }
   function removeImport(rec: ImportRecord) {
     const n = policies.filter((p) => p.importId === rec.id).length;
     if (!window.confirm(`Remove the ${n} records last imported from ${rec.fileName} (${rec.sheetName})? This cannot be undone.`)) return;
@@ -306,7 +314,7 @@ export default function PolicyPulseApp({ userEmail, onSignOut }: { userEmail: st
         ))}
         <div className="side-bottom">
           <div className="help-card"><LifeBuoy size={18} /><b>Add or refresh data</b><p>Upload new files any time. Existing policies are matched by policy number, not duplicated.</p><button onClick={startImport}>Add files <ArrowRight size={13} /></button></div>
-          <div className="profile" role="button" tabIndex={0} title="Open settings" onClick={() => setPage("Settings")} onKeyDown={(e) => { if (e.key === "Enter") setPage("Settings"); }}><Avatar photo={profile.photo} name={userName} className="profile-avatar" /><div><b>{userName}</b><small>{userEmail}</small></div><button className="sign-out" onClick={(e) => { e.stopPropagation(); onSignOut(); }} aria-label="Sign out"><LogOut size={16} /></button></div>
+          <div className="profile" role="button" tabIndex={0} title="Open settings" onClick={() => setPage("Settings")} onKeyDown={(e) => { if (e.key === "Enter") setPage("Settings"); }}><Avatar photo={profile.photo} name={userName} className="profile-avatar" /><div><b>{userName}</b><small>{userEmail}</small></div><button className="sign-out" onClick={(e) => { e.stopPropagation(); onSignOutAction(); }} aria-label="Sign out"><LogOut size={16} /></button></div>
         </div>
       </aside>
 
@@ -317,7 +325,7 @@ export default function PolicyPulseApp({ userEmail, onSignOut }: { userEmail: st
             <span className="demo-tag" title="Your data is stored only in this browser on this device"><i /> {saveError ? "NOT SAVED" : savedAt ? `SAVED ON THIS DEVICE · ${savedAt}` : "STORED ON THIS DEVICE"}</span>
             <button className="icon-button" aria-label="Urgent renewals" onClick={() => setPage("Renewal action center")}><Bell size={17} />{urgentCount > 0 && <i />}</button>
             <button className="avatar-btn" onClick={() => setPage("Settings")} aria-label="Open settings"><Avatar photo={profile.photo} name={userName} className="top-avatar" /></button>
-            <button className="sign-out top-sign-out" onClick={onSignOut} aria-label="Sign out"><LogOut size={15} /></button>
+            <button className="sign-out top-sign-out" onClick={onSignOutAction} aria-label="Sign out"><LogOut size={15} /></button>
           </div>
         </header>
 
@@ -492,7 +500,7 @@ export default function PolicyPulseApp({ userEmail, onSignOut }: { userEmail: st
               onSaveSettings={(st) => { setSettings((prev) => ({ ...st, theme: prev.theme })); setWindowF(st.defaultQueueWindow); notify("Preferences saved."); }}
               onThemeChange={(t) => setSettings((prev) => ({ ...prev, theme: t }))}
               onDownloadExcel={() => exportRows(policies)} onDownloadBackup={downloadBackup} onRestoreBackup={restoreBackup}
-              onClearAll={clearAll} onSignOut={onSignOut} notify={notify}
+              onClearAll={clearAll} onSignOut={onSignOutAction} notify={notify}
             />
           )}
 
@@ -508,11 +516,14 @@ export default function PolicyPulseApp({ userEmail, onSignOut }: { userEmail: st
                   <>
                     <div className="customer-grid">
                       {list.slice(0, customerLimit).map((c, i) => (
-                        <button className="customer-card" key={c.key} onClick={() => openCustomer(c.name, c.phone)}>
-                          <div className={`customer-avatar avatar-${i % 5}`}>{initials(c.name)}</div>
-                          <div><b>{c.name}</b><span>{c.phone || c.email || "No contact details"}</span><small>{c.policies.length} polic{c.policies.length === 1 ? "y" : "ies"} · {money(c.premium)}{c.nextExpiry ? ` · next ${dateLabel(c.nextExpiry)}` : ""}</small></div>
-                          <ArrowRight size={15} />
-                        </button>
+                        <div className="customer-card-wrap" key={c.key}>
+                          <button className="customer-card" onClick={() => openCustomer(c.name, c.phone)}>
+                            <div className={`customer-avatar avatar-${i % 5}`}>{initials(c.name)}</div>
+                            <div><b>{c.name}</b><span>{c.phone || c.email || "No contact details"}</span><small>{c.policies.length} polic{c.policies.length === 1 ? "y" : "ies"} · {money(c.premium)}{c.nextExpiry ? ` · next ${dateLabel(c.nextExpiry)}` : ""}</small></div>
+                            <ArrowRight size={15} />
+                          </button>
+                          <button className="customer-delete" onClick={() => deleteCustomer(c.name, c.policies.map((p) => p.id))} aria-label={`Delete ${c.name}`} title="Delete customer and all their policies"><Trash2 size={14} /></button>
+                        </div>
                       ))}
                     </div>
                     {list.length > customerLimit && <button className="panel-link" onClick={() => setCustomerLimit((n) => n + 60)}>Show more ({list.length - customerLimit} remaining)</button>}
@@ -683,7 +694,8 @@ export default function PolicyPulseApp({ userEmail, onSignOut }: { userEmail: st
             })()}
 
             <div className="drawer-actions">
-              <button className="btn secondary danger" onClick={() => deletePolicy(selected)}><Trash2 size={14} /> Delete</button>
+              <button className="btn secondary danger" onClick={() => deletePolicy(selected)}><Trash2 size={14} /> Delete policy</button>
+              <button className="btn secondary danger" onClick={() => deleteCustomer(selected.customerName, policies.filter((p) => customerKey(p) === customerKey(selected)).map((p) => p.id))}><Trash2 size={14} /> Delete customer</button>
               <button className="btn secondary" onClick={() => setForm({ editing: selected })}><Pencil size={14} /> Edit</button>
               <button className="btn primary" onClick={() => setSelectedId(null)}>Done</button>
             </div>
@@ -691,7 +703,7 @@ export default function PolicyPulseApp({ userEmail, onSignOut }: { userEmail: st
         </div>
       )}
 
-      {showImport && <ImportModal existing={policies} onClose={() => setShowImport(false)} onDone={onImported} />}
+      {showImport && <ImportModal existing={policies} onDoneAction={onImported} onCloseAction={() => setShowImport(false)} />}
       {form && <PolicyForm editing={form.editing} existing={policies} onSave={savePolicy} onClose={() => setForm(null)} />}
       <div className="toasts" aria-live="polite">
         {toasts.map((t) => <div key={t.id} className={`toast ${t.tone}`}>{t.tone === "ok" ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}<span>{t.msg}</span></div>)}
