@@ -23,11 +23,11 @@ const ready = (s: Source) => REQUIRED_FIELDS.every((f) => s.mapping[f]);
 
 type Props = {
   existing: Policy[];
-  onClose: () => void;
-  onDone: (policies: Policy[], records: ImportRecord[], summary: ImportSummary) => void;
+  onCloseAction: () => void;
+  onDoneAction: (policies: Policy[], records: ImportRecord[], summary: ImportSummary) => void;
 };
 
-export default function ImportModal({ existing, onClose, onDone }: Props) {
+export default function ImportModal({ existing, onCloseAction, onDoneAction }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [sources, setSources] = useState<Source[]>([]);
   const [activeId, setActiveId] = useState("");
@@ -100,18 +100,18 @@ export default function ImportModal({ existing, onClose, onDone }: Props) {
       summary.unchanged += out.record.unchanged;
       summary.rejected += out.record.rejected;
     }
-    onDone(policies, records, summary);
+    onDoneAction(policies, records, summary);
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={onCloseAction}>
       <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div className="modal-title">
             <div className="hero-icon"><CloudUpload size={20} /></div>
             <div><h2>Add your policy files</h2><p>Excel or CSV from any insurer. PolicyPulse reads, cleans and analyses them.</p></div>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
+          <button className="icon-button" onClick={onCloseAction} aria-label="Close"><X size={18} /></button>
         </div>
 
         <div className="notice"><ShieldCheck size={15} /><span><b>Private by design</b> · Files are read inside this browser and saved only on this device. Nothing is uploaded to a server.</span></div>
@@ -172,7 +172,7 @@ export default function ImportModal({ existing, onClose, onDone }: Props) {
             </div>
 
             {dry.missingRequired.length > 0 ? (
-              <div className="import-warning"><AlertTriangle size={15} />Match these required fields to continue: {dry.missingRequired.map((f) => FIELD_LABELS[f]).join(", ")}.</div>
+              <div className="import-warning"><AlertTriangle size={15} />Match these required fields to continue: {dry.missingRequired.map((f) => FIELD_LABELS[f as (typeof FIELD_KEYS)[number]]).join(", ")}.</div>
             ) : (
               <>
                 <div className="chips">
@@ -219,7 +219,7 @@ export default function ImportModal({ existing, onClose, onDone }: Props) {
         <div className="modal-footer">
           <span>{sources.length ? `${toImport.length} of ${sources.length} sheet${sources.length === 1 ? "" : "s"} ready to import` : "Required fields are marked with *"}</span>
           <div>
-            <button className="btn secondary" onClick={onClose}>Cancel</button>
+            <button className="btn secondary" onClick={onCloseAction}>Cancel</button>
             <button className="btn primary" disabled={!toImport.length || busy} onClick={runImport}><Check size={14} /> Import &amp; analyse</button>
           </div>
         </div>
