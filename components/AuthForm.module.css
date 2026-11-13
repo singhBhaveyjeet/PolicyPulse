@@ -114,7 +114,16 @@
 }
 
 .submit:hover { transform: translateY(-1px); background: #9af8df; }
+.submit:disabled,
+.googleButton:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+.divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: #73848d; font-size: 10px; text-transform: uppercase; }
+.divider::before,
+.divider::after { content: ""; flex: 1; height: 1px; background: #ffffff17; }
+.googleButton { width: 100%; min-height: 43px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #ffffff24; border-radius: 8px; color: #eaf3f3; background: #ffffff08; font-size: 12px; font-weight: 700; transition: background .2s, border-color .2s; }
+.googleButton:hover { border-color: #ffffff48; background: #ffffff10; }
+.googleButton > span { color: #8ab4f8; font: 800 17px Arial, sans-serif; }
 .error { margin: -4px 0 0; color: #ffaaa4; font-size: 11px; line-height: 1.5; }
+.notice { margin: -4px 0 0; color: #75f0d1; font-size: 11px; line-height: 1.5; }
 .switchMode { margin: 20px 0 0; color: #91a1a8; font-size: 11px; text-align: center; }
 .switchMode a { color: #75f0d1; font-weight: 700; text-decoration: none; }
 .footer { position: relative; margin: 19px 0 0; color: #73848d; font-size: 10px; text-align: center; }

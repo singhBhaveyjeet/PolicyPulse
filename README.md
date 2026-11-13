@@ -3,9 +3,9 @@
 Insurance agents work from spreadsheets sent by many insurers. PolicyPulse takes those Excel/CSV files, cleans them,
 and turns them into one searchable, traceable view with live renewal analysis.
 
-## How it works now
+## Core workflow
 
-1. **Sign in** (local gate, see limitations) and the workspace opens **empty** — there is no built-in demo data.
+1. **Create an account or sign in** with Supabase Auth. Each account gets an isolated workspace.
 2. **Add files**: choose one or many `.xlsx`, `.xls` or `.csv` files. Every visible sheet is read.
 3. **Match columns**: PolicyPulse finds the header row (even under a title row), suggests which column is which
    (`Insured Name`, `Mobile No`, `Policy Expiry Date`… dozens of aliases), and shows exactly how the first rows will be read.
@@ -24,8 +24,8 @@ and turns them into one searchable, traceable view with live renewal analysis.
     with a mauve accent; dark is near-black with a green accent. Chosen during first-time setup and in **Settings → Appearance**.
 11. **First-time setup** after login: name, agency, mobile, city, what you sell, optional photo and theme. It can be skipped
     and edited later in Settings.
-12. **Come back any time**: data is saved in the browser (IndexedDB) under the email you sign in with. Re-upload newer
-   files and matching policies are **updated**, not duplicated.
+12. **Come back any time**: policies, imports, profile and preferences are saved to the signed-in Supabase workspace.
+   Re-upload newer files and matching policies are **updated**, not duplicated.
 
 ## What it cleans automatically
 - Dates: Excel serials, `20/10/2026`, `20-Oct-2026`, `2026-10-20`, `Oct 20, 2026` (ambiguous numeric dates are read day-first)
@@ -42,9 +42,24 @@ Node.js 20+ required.
 
 ```bash
 npm install
+Copy-Item .env.example .env.local
+# Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY in .env.local
 npm run dev
 ```
-Open http://localhost:3000, choose **Get started**, then **Add files**.
+Before starting the app:
+
+1. Create a Supabase project and copy its project URL and publishable key into `.env.local`.
+2. Run [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL Editor. The table has row-level security enabled;
+   each authenticated user can only read or modify their own workspace.
+3. Configure the Supabase Auth email provider and set the local site URL to `http://localhost:3000`. Add
+   `http://localhost:3000/dashboard` and `http://localhost:3000/auth/reset-password` to the allowed redirect URLs.
+4. To enable **Continue with Google**, create a Google OAuth client of type **Web application**. Add your app origin
+   (for example `http://localhost:3000`) to its authorized JavaScript origins and
+   `https://<project-ref>.supabase.co/auth/v1/callback` to its authorized redirect URIs. Enable Google under
+   **Supabase → Authentication → Sign In / Providers** and enter the Google client ID and secret there. Do not put
+   Google's client secret in `.env.local` or browser code.
+5. Open http://localhost:3000, choose **Create account** or **Continue with Google**, then **Add files**.
+
 `sample-data/` has fictional files for a first try.
 
 ## Project structure
@@ -63,26 +78,32 @@ lib/
   build.ts                Rows → policies, duplicate detection, merge on re-import
   importer.ts             Reads Excel/CSV in the browser (SheetJS), header-row detection
   analysis.ts             Status tiers, stats, insights, customer grouping, WhatsApp link
-  storage.ts              IndexedDB persistence per signed-in email (policies, profile, settings)
+  storage.ts              Supabase workspace persistence for the authenticated user
+  supabase.ts             Supabase client configuration
   settings.ts             Defaults and the WhatsApp message template engine
   image.ts                Profile photo resizing
-  demo-auth.ts            Local session flag
 sample-data/              Fictional CSV files
+supabase/schema.sql       Workspace table, grants and row-level security
 ```
 
-## Limitations (read before using real client data)
-- **Data lives only in this browser on this device.** Clearing site data or changing browser/computer loses it. Use
-  **Settings → Download backup** regularly.
-- **Sign-in is not real security.** Any password of 8+ characters works; the email only decides which local workspace opens.
-  Do not use on a shared computer. A real version needs a backend with proper authentication and encrypted storage.
-- No multi-user sharing, no server-side processing, no automatic reminders or AI yet.
+## Operational and privacy notes
+- Supabase is now the source of truth. Use a Supabase project you control and keep its database backups enabled.
+- Only the public/publishable key belongs in this browser app. Never add a Supabase service-role key to `NEXT_PUBLIC_*` or
+  commit credentials. Access control depends on applying the included RLS policies; do not expose client records before
+  confirming they are active.
+- Existing records in the previous local-browser version are not uploaded automatically. Export a backup from that
+  version and restore it from **Settings → Restore from backup** after signing in. This requires an intentional user action.
+- There is no multi-agent organization sharing, scheduled reminder delivery, or AI assistant yet.
 - Uses `xlsx@0.18.5` from npm, which has known advisories for untrusted files. For files only you provide this is low risk;
   before a hosted release switch to the maintained SheetJS build.
 - Premium/expiry accuracy depends on your source files — always check the preview step.
 
-## Next steps
-PostgreSQL + real authentication, server-side imports, scheduled reminder emails/WhatsApp, AI assistant over the
-portfolio, multi-agent tenancy, automated tests.
+Renewal tracking, customer records, cross-file search, data-quality reporting and source provenance are included as
+practical daily tools. Based on the supplied roadmap, future work is human-reviewed customer matching, team roles and
+tenant sharing, server-side import processing, audit/retention controls, scheduled reminders and optional AI querying.
+
+Before using real client data, review applicable privacy, consent, retention, access and breach-response requirements with
+your firm and legal/compliance adviser. This application does not itself certify regulatory compliance.
 
 ## Themes (how they work)
 Every colour in `app/globals.css` and `app/dashboard/dashboard.css` is a variable such as `var(--c-3568e8)`.
