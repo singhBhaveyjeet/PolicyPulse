@@ -39,8 +39,8 @@ type Toast = { id: number; msg: string; tone: "ok" | "error" };
 const prettyName = (email: string) =>
   (email.split("@")[0] || "there").replace(/[._-]+/g, " ").replace(/\w\S*/g, (w) => w[0].toUpperCase() + w.slice(1));
 
-export default function PolicyPulseApp({ userEmail, onSignOutAction }: { userEmail: string; onSignOutAction: () => void }) {
-  // ---- workspace (saved on this device) ----
+export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: { userId: string; userEmail: string; onSignOutAction: () => void }) {
+  // ---- workspace (saved to the signed-in Supabase account) ----
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [imports, setImports] = useState<ImportRecord[]>([]);
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
@@ -48,6 +48,7 @@ export default function PolicyPulseApp({ userEmail, onSignOutAction }: { userEma
   const userName = profile.name.trim() || prettyName(userEmail);
   const PAGE_SIZE = settings.pageSize;
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [savedAt, setSavedAt] = useState("");
 
@@ -73,26 +74,29 @@ export default function PolicyPulseApp({ userEmail, onSignOutAction }: { userEma
 
   useEffect(() => {
     let alive = true;
-    loadWorkspace(userEmail)
+    loadWorkspace(userId)
       .then((ws) => {
         if (!alive) return;
         const st = mergeSettings(ws.settings);
         setPolicies(ws.policies); setImports(ws.imports); setProfile(mergeProfile(ws.profile)); setSettings(st); setWindowF(st.defaultQueueWindow);
       })
-      .catch(() => { if (alive) setSaveError("This browser could not open its local storage, so your data will not be kept after you close the tab."); })
+      .catch((error: unknown) => {
+        if (!alive) return;
+        setLoadError(error instanceof Error ? error.message : "Could not load your Supabase workspace.");
+      })
       .finally(() => { if (alive) setLoaded(true); });
     return () => { alive = false; };
-  }, [userEmail]);
+  }, [userId]);
 
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || loadError) return;
     const t = setTimeout(() => {
-      saveWorkspace(userEmail, { policies, imports, profile, settings })
+      saveWorkspace(userId, { policies, imports, profile, settings })
         .then(() => { setSaveError(""); setSavedAt(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })); })
-        .catch(() => setSaveError("Could not save to this browser. Export your data to keep a copy."));
+        .catch((error: unknown) => setSaveError(error instanceof Error ? error.message : "Could not save your Supabase workspace. Export a backup to keep a copy."));
     }, 400);
     return () => clearTimeout(t);
-  }, [policies, imports, profile, settings, loaded, userEmail]);
+  }, [policies, imports, profile, settings, loaded, loadError, userId]);
 
   useEffect(() => { setPageNum(1); }, [search, insurerF, typeF, statusF, followF, sortBy, page]);
   useEffect(() => { setCustomerLimit(60); }, [search, page]);
@@ -245,6 +249,7 @@ export default function PolicyPulseApp({ userEmail, onSignOutAction }: { userEma
   const resetFilters = () => { setSearch(""); setInsurerF("All insurers"); setTypeF("All types"); setStatusF("All statuses"); setFollowF("All follow-ups"); };
   const openCustomer = (name: string, phone: string) => { setSearch(phone || name); setPage("Policy records"); };
 
+  if (loadError) return <main className="auth-loading" role="alert">{loadError} Apply the Supabase setup in the project README, then reload. Your existing cloud data has not been overwritten.</main>;
   if (!loaded) return <main className="auth-loading" aria-live="polite">Opening your workspace…</main>;
 
   if (!profile.onboarded) {

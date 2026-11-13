@@ -62,7 +62,7 @@ export default function SettingsPage(props: Props) {
                 <button className="btn secondary" onClick={() => photoRef.current?.click()}><Camera size={14} /> {profile.photo ? "Change photo" : "Upload photo"}</button>
                 {profile.photo && <button className="btn secondary danger" onClick={() => setProfile({ ...profile, photo: "" })}>Remove</button>}
               </div>
-              <small>JPG or PNG. It is resized and stored only in this browser.</small>
+              <small>JPG or PNG. It is resized and stored in your Supabase workspace.</small>
             </div>
             <input ref={photoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => pickPhoto(e.target.files?.[0])} />
           </div>
@@ -117,7 +117,7 @@ export default function SettingsPage(props: Props) {
       </section>
 
       <section className="panel">
-        <PanelHead title="Data & backup" subtitle={`${policies.length.toLocaleString("en-IN")} policies are stored in this browser`} action={<Database size={18} className="muted" />} />
+        <PanelHead title="Data & backup" subtitle={`${policies.length.toLocaleString("en-IN")} policies are stored in your Supabase workspace`} action={<Database size={18} className="muted" />} />
         <div className="settings-body">
           <div className="data-row"><div><b>Download updated Excel</b><span>All policies, including entries you added or edited. The file can be imported again.</span></div>
             <button className="btn primary" disabled={!policies.length} onClick={props.onDownloadExcel}><Download size={14} /> Download .xlsx</button></div>
@@ -134,7 +134,7 @@ export default function SettingsPage(props: Props) {
         <div className="settings-body">
           <div className="data-row"><div><b>Sign out</b><span>You can sign back in with the same email to see your data again.</span></div>
             <button className="btn secondary" onClick={props.onSignOut}><LogOut size={14} /> Sign out</button></div>
-          <div className="data-row"><div><b>Delete all data</b><span>Removes every policy and import record from this browser. Your profile and preferences stay. Download a backup first.</span></div>
+          <div className="data-row"><div><b>Delete all data</b><span>Removes every policy and import record from your workspace. Your profile and preferences stay. Download a backup first.</span></div>
             <button className="btn secondary danger" onClick={props.onClearAll}><Trash2 size={14} /> Delete everything</button></div>
         </div>
       </section>
