@@ -10,16 +10,17 @@ import { loadWorkspace, saveWorkspace } from "@/lib/storage";
 import { downloadJSON, downloadTemplate, exportPolicies } from "@/lib/importer";
 import { DEFAULT_SETTINGS, EMPTY_PROFILE, mergeProfile, mergeSettings } from "@/lib/settings";
 import {
-  FOLLOW_UP_LABEL, buildInsights, computeStats, dateLabel, daysLeft, dueText, expiryTimeline, groupCustomers, initials, isOpen, money,
-  compactMoney, customerKey, statusOf, whatsappLink, STATUS_ORDER,
+  FOLLOW_UP_LABEL, FOLLOW_UP_ORDER, buildInsights, computeStats, dateLabel, daysLeft, dueText, groupCustomers, initials, isOpen, money, rankPriorityRenewals,
+  customerKey, statusOf, whatsappLink, STATUS_ORDER,
 } from "@/lib/analysis";
 import { cleanPhone, textKey } from "@/lib/normalize";
 import ImportModal, { type ImportSummary } from "./ImportModal";
-import { AreaChart, DonutChart, ProgressRing, topSlices } from "./charts";
+import { AreaChart } from "./charts";
+import AnalyticsDashboard from "./AnalyticsDashboard";
 import PolicyForm from "./PolicyForm";
 import Onboarding from "./Onboarding";
 import SettingsPage from "./SettingsPage";
-import { Avatar, BarList, ColumnChart, Pair, PanelHead, PolicyTable, Stat, StatusPill } from "./ui";
+import { Avatar, ColumnChart, Pair, PanelHead, PolicyTable, Stat, StatusPill } from "./ui";
 
 type Page = "Overview" | "Policy records" | "Customers" | "Import center" | "Renewal action center" | "Analytics" | "Settings";
 const nav: { label: Page; icon: typeof Activity; group: string }[] = [
@@ -51,6 +52,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
   const [loadError, setLoadError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [savedAt, setSavedAt] = useState("");
+  const [priorityToday, setPriorityToday] = useState(() => new Date());
 
   // ---- view state ----
   const [page, setPage] = useState<Page>("Overview");
@@ -66,8 +68,6 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [form, setForm] = useState<{ editing: Policy | null } | null>(null);
-  const [months, setMonths] = useState<6 | 12 | 24>(12);
-  const [trend, setTrend] = useState<"count" | "premium">("count");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [banner, setBanner] = useState<ImportSummary | null>(null);
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -104,11 +104,23 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
     document.documentElement.dataset.appTheme = settings.theme;
     return () => { delete document.documentElement.dataset.appTheme; };
   }, [settings.theme]);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const refreshAtMidnight = () => {
+      const now = new Date();
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      timer = setTimeout(() => {
+        setPriorityToday(new Date());
+        refreshAtMidnight();
+      }, midnight.getTime() - now.getTime());
+    };
+    refreshAtMidnight();
+    return () => clearTimeout(timer);
+  }, []);
 
   // ---- analysis ----
-  const stats = useMemo(() => computeStats(policies), [policies]);
+  const stats = useMemo(() => computeStats(policies, priorityToday), [policies, priorityToday]);
   const insights = useMemo(() => buildInsights(policies, stats), [policies, stats]);
-  const trendBuckets = useMemo(() => expiryTimeline(policies, new Date(), months), [policies, months]);
   const customers = useMemo(() => groupCustomers(policies), [policies]);
   const insurerNames = useMemo(() => stats.byInsurer.map((b) => b.name), [stats]);
   const typeNames = useMemo(() => stats.byType.map((b) => b.name), [stats]);
@@ -165,8 +177,8 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
       .sort((a, b) => a.expiryDate.localeCompare(b.expiryDate) || b.premium - a.premium);
   }, [open, windowF, search, insurerF]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const watchlist = useMemo(() => open.filter((p) => daysLeft(p.expiryDate) <= 14).sort((a, b) => a.expiryDate.localeCompare(b.expiryDate)).slice(0, 5), [open]);
-  const urgentCount = open.filter((p) => daysLeft(p.expiryDate) <= 5).length;
+  const priorityRenewals = useMemo(() => rankPriorityRenewals(open, priorityToday).slice(0, 20), [open, priorityToday]);
+  const urgentCount = open.filter((p) => daysLeft(p.expiryDate, priorityToday) <= 5).length;
 
   // ---- actions ----
   function patchPolicy(id: string, change: Partial<Policy>) {
@@ -249,7 +261,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
       const ok = data && data.app === "PolicyPulse" && Array.isArray(data.policies) &&
         data.policies.every((p: Policy) => p && typeof p.id === "string" && typeof p.customerName === "string" && typeof p.policyNumber === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.expiryDate));
       if (!ok) { notify("That does not look like a PolicyPulse backup file.", "error"); return; }
-      if (!window.confirm(`Replace everything in this browser with this backup (${data.policies.length} policies)?`)) return;
+      if (!window.confirm(`Replace your Supabase workspace with this backup (${data.policies.length} policies)?`)) return;
       setPolicies(data.policies);
       setImports(Array.isArray(data.imports) ? data.imports : []);
       setProfile({ ...mergeProfile(data.profile), onboarded: true });
@@ -302,7 +314,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
     <section className="panel empty-hero">
       <div className="hero-icon big"><CloudUpload size={28} /></div>
       <h2>Start with your own spreadsheets</h2>
-      <p>Add the Excel or CSV files you already use. PolicyPulse cleans the data, finds duplicates, ranks renewals by urgency and builds your analysis in seconds. Your data stays in this browser.</p>
+      <p>Add the Excel or CSV files you already use. PolicyPulse cleans the data, finds duplicates, ranks renewals by urgency and builds your analysis in seconds. Imported records are saved to your private Supabase workspace.</p>
       <div className="empty-actions">
         <button className="btn primary" onClick={startImport}><Upload size={15} /> Add Excel / CSV files</button>
         <button className="btn secondary" onClick={() => setForm({ editing: null })}><PlusCircle size={14} /> Add a policy manually</button>
@@ -345,7 +357,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
         <header className="topbar">
           <div className="crumb">Workspace <ChevronRight size={14} /><b>{page}</b></div>
           <div className="top-actions">
-            <span className="demo-tag" title="Your data is stored only in this browser on this device"><i /> {saveError ? "NOT SAVED" : savedAt ? `SAVED ON THIS DEVICE · ${savedAt}` : "STORED ON THIS DEVICE"}</span>
+            <span className="demo-tag" title="Your records are saved to your authenticated Supabase workspace"><i /> {saveError ? "NOT SAVED" : savedAt ? `SYNCED · ${savedAt}` : "SUPABASE WORKSPACE"}</span>
             <button className="icon-button" aria-label="Urgent renewals" onClick={() => setPage("Renewal action center")}><Bell size={17} />{urgentCount > 0 && <i />}</button>
             <button className="avatar-btn" onClick={() => setPage("Settings")} aria-label="Open settings"><Avatar photo={profile.photo} name={userName} className="top-avatar" /></button>
             <button className="sign-out top-sign-out" onClick={onSignOutAction} aria-label="Sign out"><LogOut size={15} /></button>
@@ -399,6 +411,48 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
                 <Stat title="Expiring in 30 days" value={stats.due30.length.toLocaleString("en-IN")} icon={<CalendarClock size={18} />} tone="amber" foot={stats.expiredOpen.length ? `${stats.expiredOpen.length} already expired` : "Requires follow-up"} />
                 <Stat title="Premium at risk" value={money(stats.premiumAtRisk)} icon={<Gauge size={18} />} tone="green" foot="Due within 30 days" />
               </section>
+              <section className="panel priority-panel">
+                <PanelHead
+                  title="Top 20 Priority Renewals"
+                  subtitle="Expiry urgency first, then premium and follow-up status. Renewed and lost policies are excluded."
+                  action={<button className="text-action" onClick={() => setPage("Renewal action center")}>Open action center <ArrowRight size={13} /></button>}
+                />
+                <div className="priority-list">
+                  {priorityRenewals.map((policy, index) => {
+                    const days = daysLeft(policy.expiryDate, priorityToday);
+                    const band = days < 0 ? "expired" : days <= 5 ? "critical" : days <= 14 ? "urgent" : days <= 30 ? "attention" : "upcoming";
+                    const bandLabel = band === "expired" ? "Expired" : band[0].toUpperCase() + band.slice(1);
+                    const phoneKey = cleanPhone(policy.phone).key;
+                    const wa = whatsappLink(policy, settings.whatsappTemplate, userName);
+                    return (
+                      <div className="priority-row" key={policy.id}>
+                        <span className="priority-rank">{String(index + 1).padStart(2, "0")}</span>
+                        <button className="priority-customer" onClick={() => setSelectedId(policy.id)}>
+                          <b>{policy.customerName}</b><small>Policy {policy.policyNumber}</small>
+                        </button>
+                        <div className="priority-company"><b>{policy.insurer}</b><small>{policy.policyType}</small></div>
+                        <div className="priority-expiry">
+                          <span className={`priority-band ${band}`}>{bandLabel}</span>
+                          <b>{dateLabel(policy.expiryDate)}</b>
+                          <small>{days < 0 ? `${Math.abs(days)} day${days === -1 ? "" : "s"} overdue` : days === 0 ? "Due today" : `${days} day${days === 1 ? "" : "s"} remaining`}</small>
+                        </div>
+                        <div className="priority-premium"><small>Premium</small><b>{policy.premium ? money(policy.premium) : "—"}</b></div>
+                        <div className="priority-followup">
+                          <span className={`priority-followup-status ${policy.followUp}`}>{FOLLOW_UP_LABEL[policy.followUp]}</span>
+                          {policy.followUp === "pending" && <button className="priority-contact" onClick={() => setFollowUp(policy.id, "contacted")}>Mark contacted</button>}
+                        </div>
+                        <div className="priority-actions">
+                          {phoneKey ? <a className="action-btn" href={`tel:${phoneKey}`} title="Call customer" aria-label={`Call ${policy.customerName}`}><Phone size={14} /></a> : <span className="action-btn off" title="No phone number"><Phone size={14} /></span>}
+                          {wa ? <a className="action-btn" href={wa} target="_blank" rel="noreferrer" title="Send WhatsApp" aria-label={`WhatsApp ${policy.customerName}`}><MessageCircle size={14} /></a> : <span className="action-btn off" title="No valid mobile number"><MessageCircle size={14} /></span>}
+                          {policy.email ? <a className="action-btn" href={`mailto:${policy.email}?subject=${encodeURIComponent(`Policy ${policy.policyNumber} renewal`)}`} title="Email customer" aria-label={`Email ${policy.customerName}`}><Mail size={14} /></a> : <span className="action-btn off" title="No email address"><Mail size={14} /></span>}
+                          <button className="action-btn" onClick={() => setSelectedId(policy.id)} title="View details and follow-up notes" aria-label={`View ${policy.customerName} details and notes`}><Pencil size={14} /></button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {!priorityRenewals.length && <div className="priority-empty"><CheckCircle2 size={21} /><b>You’re all caught up!</b><span>There are no policies requiring immediate renewal action.</span></div>}
+                </div>
+              </section>
               <section className="two-col">
                 <div className="panel">
                   <PanelHead title="Portfolio by insurer" subtitle="Policies and renewals due in 30 days" />
@@ -414,20 +468,12 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
                   <button className="panel-link" onClick={() => setPage("Analytics")}>See full analytics <ArrowRight size={14} /></button>
                 </div>
                 <div className="panel">
-                  <PanelHead title="Renewal watchlist" subtitle="Overdue and next 14 days, most urgent first" tag="LIVE" />
-                  <div className="watchlist">
-                    {watchlist.map((p) => {
-                      const d = daysLeft(p.expiryDate);
-                      return (
-                        <button className="watch-row" key={p.id} onClick={() => setSelectedId(p.id)}>
-                          <div className={`days-badge ${d <= 5 ? "critical" : "urgent"}`}><b>{Math.abs(d)}</b><small>{d < 0 ? "LATE" : d === 1 ? "DAY" : "DAYS"}</small></div>
-                          <div className="watch-copy"><b>{p.customerName}</b><span>{p.policyType} · {p.insurer}</span></div>
-                          <div className="watch-premium"><b>{p.premium ? money(p.premium) : "—"}</b><span>{dateLabel(p.expiryDate)}</span></div>
-                          <ChevronRight size={14} />
-                        </button>
-                      );
-                    })}
-                    {!watchlist.length && <div className="empty">Nothing is due in the next 14 days.</div>}
+                  <PanelHead title="Renewal snapshot" subtitle="Your next workload at a glance" tag="LIVE" />
+                  <div className="renewal-snapshot">
+                    <div><b>{stats.expiredOpen.length}</b><span>Expired and still open</span></div>
+                    <div><b>{stats.due7.length}</b><span>Expiring in 7 days</span></div>
+                    <div><b>{stats.due30.length}</b><span>Expiring in 30 days</span></div>
+                    <div><b>{money(stats.premiumAtRisk)}</b><span>Premium at risk</span></div>
                   </div>
                   <button className="panel-link" onClick={() => setPage("Renewal action center")}>Open action center <ArrowRight size={14} /></button>
                 </div>
@@ -455,64 +501,15 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
           )}
 
           {/* ---------------- ANALYTICS ---------------- */}
-          {page === "Analytics" && (empty ? emptyState : (
-            <>
-              <section className="stats">
-                <Stat title="Total premium" value={money(stats.premiumTotal)} icon={<Gauge size={18} />} tone="green" foot="Across all policies" />
-                <Stat title="Premium at risk" value={money(stats.premiumAtRisk)} icon={<CalendarClock size={18} />} tone="amber" foot={`${stats.due30.length} policies in 30 days`} />
-                <Stat title="Possibly lapsed" value={money(stats.premiumLapsed)} icon={<AlertTriangle size={18} />} tone="amber" foot={`${stats.expiredOpen.length} expired, still open`} />
-                <Stat title="Closed renewals" value={`${stats.renewed} / ${stats.renewed + stats.lost}`} icon={<CheckCircle2 size={18} />} tone="blue" foot="Renewed out of closed" />
-              </section>
-
-              <section className="panel" style={{ marginBottom: 17 }}>
-                <PanelHead title="Renewals over time" subtitle={trend === "count" ? "Open policies expiring each month" : "Premium expiring each month"} action={
-                  <div className="seg-group">
-                    <div className="seg">{(["count", "premium"] as const).map((m) => <button key={m} className={trend === m ? "on" : ""} onClick={() => setTrend(m)}>{m === "count" ? "Policies" : "Premium"}</button>)}</div>
-                    <div className="seg">{([6, 12, 24] as const).map((m) => <button key={m} className={months === m ? "on" : ""} onClick={() => setMonths(m)}>{m}M</button>)}</div>
-                  </div>} />
-                <div className="chart-pad"><AreaChart buckets={trendBuckets} metric={trend} /></div>
-              </section>
-
-              <section className="two-col">
-                <div className="panel"><PanelHead title="Policies by insurer" subtitle="Share of your portfolio" />
-                  <div className="chart-pad"><DonutChart slices={topSlices(stats.byInsurer.map((b) => ({ label: b.name, value: b.count })))} centerValue={String(stats.byInsurer.length)} centerLabel={stats.byInsurer.length === 1 ? "insurer" : "insurers"} /></div></div>
-                <div className="panel"><PanelHead title="Policy types" subtitle="Motor, health, life and more" />
-                  <div className="chart-pad"><DonutChart slices={topSlices(stats.byType.map((b) => ({ label: b.name, value: b.count })))} centerValue={String(stats.byType.length)} centerLabel={stats.byType.length === 1 ? "type" : "types"} /></div></div>
-              </section>
-
-              <section className="two-col">
-                <div className="panel"><PanelHead title="Renewal urgency" subtitle="Open policies by how soon they expire" />
-                  <div className="chart-pad"><DonutChart slices={STATUS_ORDER.map((st) => ({ label: st, value: stats.byStatus[st], color: ({ Expired: "#cf4f4f", "Expires Today": "#e0627a", Critical: "#e6a23c", Urgent: "#f2c34d", Attention: "#4aa8d8", Upcoming: "#3568e8" } as Record<string, string>)[st] })).filter((x) => x.value > 0)} centerValue={String(stats.openTotal)} centerLabel="open" /></div></div>
-                <div className="panel"><PanelHead title="Follow-up progress" subtitle="Where each policy stands with you" />
-                  <div className="chart-pad">
-                    <DonutChart slices={(Object.keys(FOLLOW_UP_LABEL) as FollowUp[]).map((k) => ({ label: FOLLOW_UP_LABEL[k], value: policies.filter((p) => p.followUp === k).length, color: ({ pending: "#b4bfd0", contacted: "#4aa8d8", renewed: "#22a37a", lost: "#cf4f4f" } as Record<string, string>)[k] })).filter((x) => x.value > 0)} centerValue={String(stats.total)} centerLabel="policies" />
-                    {stats.renewed + stats.lost > 0 && <ProgressRing value={stats.renewed} total={stats.renewed + stats.lost} label="Renewal success rate" />}
-                  </div></div>
-              </section>
-
-              <section className="two-col">
-                <div className="panel"><PanelHead title="Premium by insurer" subtitle="Share of total premium" /><BarList items={[...stats.byInsurer].sort((a, b) => b.premium - a.premium).slice(0, 8).map((b) => ({ label: b.name, value: b.premium, display: money(b.premium), hint: `${b.count} policies · ${b.due30} due in 30 days` }))} /></div>
-                <div className="panel"><PanelHead title="Premium due by month" subtitle="Next 12 months, open policies" /><ColumnChart buckets={stats.timeline} metric="premium" /></div>
-              </section>
-
-              <section className="two-col">
-                <div className="panel"><PanelHead title="Top customers by premium" subtitle="Grouped by phone number" />
-                  <BarList items={[...customers].sort((a, b) => b.premium - a.premium).slice(0, 6).map((c) => ({ label: c.name, value: c.premium, display: money(c.premium), hint: `${c.policies.length} polic${c.policies.length === 1 ? "y" : "ies"}` }))} /></div>
-                <div className="panel"><PanelHead title="Premium by policy type" subtitle={`Total ${compactMoney(stats.premiumTotal)}`} />
-                  <BarList items={[...stats.byType].sort((a, b) => b.premium - a.premium).slice(0, 8).map((b) => ({ label: b.name, value: b.premium, display: money(b.premium), hint: `${b.count} policies` }))} /></div>
-              </section>
-
-              <section className="panel" style={{ marginBottom: 17 }}>
-                <PanelHead title="Data quality" subtitle="Fix these with Edit, or in your source file and import again" />
-                <div className="quality-grid">
-                  {[
-                    ["No phone number", stats.quality.noPhone], ["Invalid phone number", stats.quality.invalidPhone], ["No email", stats.quality.noEmail],
-                    ["No contact details at all", stats.quality.noContact], ["Insurer unknown", stats.quality.noInsurer], ["Premium missing", stats.quality.noPremium],
-                  ].map(([label, n]) => <div key={label as string} className={Number(n) ? "q warn" : "q"}><b>{Number(n).toLocaleString("en-IN")}</b><span>{label}</span></div>)}
-                </div>
-              </section>
-            </>
-          ))}
+          {page === "Analytics" && (
+            <AnalyticsDashboard
+              policies={policies}
+              today={priorityToday}
+              insurers={insurerNames}
+              policyTypes={typeNames}
+              onSelectPolicyAction={setSelectedId}
+            />
+          )}
 
           {/* ---------------- SETTINGS ---------------- */}
           {page === "Settings" && (
@@ -571,7 +568,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
                 <div><b>02</b><strong>Match columns</strong><small>Auto-suggested</small></div><ArrowRight size={17} />
                 <div><b>03</b><strong>Analyse</strong><small>Instant insights</small></div>
               </div>
-              <PanelHead title="Import history" subtitle="Every file you have added on this device" />
+              <PanelHead title="Import history" subtitle="Files imported into your Supabase workspace" />
               {!imports.length && <div className="empty"><FileSpreadsheet size={20} /><b>No files imported yet</b><span>Your imports will be listed here.</span></div>}
               {imports.map((x) => {
                 const live = policies.filter((p) => p.importId === x.id).length;
@@ -584,7 +581,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
                 );
               })}
               <div className="danger-zone">
-                <div><b>Your data</b><span>Stored only in this browser. Clearing browser data or switching device will not carry it over, so export a backup regularly.</span></div>
+                <div><b>Your data</b><span>Policies and import history are stored in your signed-in Supabase workspace. Download a backup before deleting records or switching projects.</span></div>
                 <button className="btn secondary" disabled={empty} onClick={() => exportRows(policies)}><Download size={14} /> Download Excel</button>
                 <button className="btn secondary danger" disabled={empty} onClick={clearAll}><Trash2 size={14} /> Delete all data</button>
               </div>
@@ -622,7 +619,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
                         {wa ? <a className="action-btn" href={wa} target="_blank" rel="noreferrer" title="WhatsApp"><MessageCircle size={14} /></a> : <span className="action-btn off" title="No valid mobile"><MessageCircle size={14} /></span>}
                         {p.email ? <a className="action-btn" href={`mailto:${p.email}?subject=${encodeURIComponent(`Policy ${p.policyNumber} renewal`)}`} title="Email"><Mail size={14} /></a> : <span className="action-btn off" title="No email"><Mail size={14} /></span>}
                         <select className="followup-select" value={p.followUp} onChange={(e) => setFollowUp(p.id, e.target.value as FollowUp)} aria-label="Follow-up status">
-                          {(Object.keys(FOLLOW_UP_LABEL) as FollowUp[]).map((k) => <option key={k} value={k}>{FOLLOW_UP_LABEL[k]}</option>)}
+                          {FOLLOW_UP_ORDER.map((k) => <option key={k} value={k}>{FOLLOW_UP_LABEL[k]}</option>)}
                         </select>
                       </div>
                     </div>
@@ -643,7 +640,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
                 <select value={insurerF} onChange={(e) => setInsurerF(e.target.value)}><option>All insurers</option>{insurerNames.map((i) => <option key={i}>{i}</option>)}</select>
                 <select value={typeF} onChange={(e) => setTypeF(e.target.value)}><option>All types</option>{typeNames.map((t) => <option key={t}>{t}</option>)}</select>
                 <select value={statusF} onChange={(e) => setStatusF(e.target.value)}><option>All statuses</option>{STATUS_ORDER.map((s) => <option key={s}>{s}</option>)}<option>Renewed</option><option>Lost</option></select>
-                <select value={followF} onChange={(e) => setFollowF(e.target.value)}><option>All follow-ups</option>{(Object.keys(FOLLOW_UP_LABEL) as FollowUp[]).map((k) => <option key={k} value={k}>{FOLLOW_UP_LABEL[k]}</option>)}</select>
+                <select value={followF} onChange={(e) => setFollowF(e.target.value)}><option>All follow-ups</option>{FOLLOW_UP_ORDER.map((k) => <option key={k} value={k}>{FOLLOW_UP_LABEL[k]}</option>)}</select>
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortKey)} aria-label="Sort">
                   <option value="urgent">Most urgent first</option><option value="latest">Latest expiry first</option><option value="premium">Highest premium</option><option value="name">Customer A–Z</option><option value="imported">Recently imported</option>
                 </select>
@@ -661,7 +658,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
             </section>
           ))}
 
-          <footer className="footer"><span>© 2026 PolicyPulse · Insurance data intelligence</span><span><i /> Your data stays in this browser</span></footer>
+          <footer className="footer"><span>© 2026 PolicyPulse · Insurance data intelligence</span><span><i /> Private Supabase workspace</span></footer>
         </div>
       </main>
 
@@ -682,7 +679,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
               </div>
               <label className="field-label">Status
                 <select value={selected.followUp} onChange={(e) => setFollowUp(selected.id, e.target.value as FollowUp)}>
-                  {(Object.keys(FOLLOW_UP_LABEL) as FollowUp[]).map((k) => <option key={k} value={k}>{FOLLOW_UP_LABEL[k]}</option>)}
+                  {FOLLOW_UP_ORDER.map((k) => <option key={k} value={k}>{FOLLOW_UP_LABEL[k]}</option>)}
                 </select>
               </label>
               <label className="field-label">Notes

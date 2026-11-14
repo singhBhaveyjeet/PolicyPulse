@@ -4,7 +4,7 @@ import { Check, PlusCircle, Save, X } from "lucide-react";
 import type { FollowUp, Policy } from "@/lib/types";
 import { newId, todayISO } from "@/lib/build";
 import { cleanEmail, cleanPhone, cleanText, makePolicyKey, normalizePolicyType, textKey, toISODate } from "@/lib/normalize";
-import { FOLLOW_UP_LABEL } from "@/lib/analysis";
+import { FOLLOW_UP_LABEL, FOLLOW_UP_ORDER } from "@/lib/analysis";
 
 type Props = {
   editing: Policy | null; // null = add a new policy
@@ -130,7 +130,7 @@ export default function PolicyForm({ editing, existing, onSaveAction, onCloseAct
             <input type="number" min="0" max="999999999999.99" step="0.01" value={f.premium} onChange={(e) => set("premium", e.target.value)} placeholder="e.g. 18450" />{err("premium")}</label>
           <label>Follow-up status
             <select value={f.followUp} onChange={(e) => set("followUp", e.target.value)}>
-              {(Object.keys(FOLLOW_UP_LABEL) as FollowUp[]).map((k) => <option key={k} value={k}>{FOLLOW_UP_LABEL[k]}</option>)}
+              {FOLLOW_UP_ORDER.map((k) => <option key={k} value={k}>{FOLLOW_UP_LABEL[k]}</option>)}
             </select></label>
           <label className="wide">Notes
             <textarea rows={2} value={f.note} onChange={(e) => set("note", e.target.value)} placeholder="Anything worth remembering about this customer" /></label>

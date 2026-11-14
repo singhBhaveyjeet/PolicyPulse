@@ -123,7 +123,7 @@ export default function SettingsPage(props: Props) {
             <button className="btn primary" disabled={!policies.length} onClick={props.onDownloadExcelAction}><Download size={14} /> Download .xlsx</button></div>
           <div className="data-row"><div><b>Full backup</b><span>Policies, import history, profile and preferences in one file you can restore later or on another computer.</span></div>
             <button className="btn secondary" onClick={props.onDownloadBackupAction}><Download size={14} /> Download backup</button></div>
-          <div className="data-row"><div><b>Restore from backup</b><span>Replaces everything in this browser with the contents of a PolicyPulse backup file.</span></div>
+          <div className="data-row"><div><b>Restore from backup</b><span>Replaces the records, imports, profile and preferences in your signed-in Supabase workspace.</span></div>
             <button className="btn secondary" onClick={() => restoreRef.current?.click()}><Upload size={14} /> Choose backup file</button>
             <input ref={restoreRef} type="file" accept=".json,application/json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) props.onRestoreBackupAction(f); if (restoreRef.current) restoreRef.current.value = ""; }} /></div>
         </div>

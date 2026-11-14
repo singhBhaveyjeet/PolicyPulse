@@ -61,7 +61,7 @@ export function PolicyTable({ policies, onSelectAction }: { policies: Policy[]; 
               <td><span className="type-pill">{p.policyType}</span></td>
               <td><div className="expiry"><b>{dateLabel(p.expiryDate)}</b><span>{dueText(p.expiryDate)}</span></div></td>
               <td><b>{p.premium ? money(p.premium) : "—"}</b></td>
-              <td><StatusPill policy={p} />{p.followUp === "contacted" && <small className="sub-note">{FOLLOW_UP_LABEL.contacted}</small>}</td>
+              <td><StatusPill policy={p} />{(p.followUp === "contacted" || p.followUp === "interested") && <small className={`sub-note follow-up-${p.followUp}`}>{FOLLOW_UP_LABEL[p.followUp]}</small>}</td>
               <td><ChevronRight size={15} /></td>
             </tr>
           ))}
