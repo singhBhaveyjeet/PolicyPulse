@@ -16,7 +16,7 @@ export function topSlices(items: Slice[], keep = 5): Slice[] {
   return out.map((s, i) => ({ ...s, color: s.color ?? PALETTE[i % PALETTE.length] }));
 }
 
-export function DonutChart({ slices, centerValue, centerLabel, format }: { slices: Slice[]; centerValue: string; centerLabel: string; format?: (n: number) => string }) {
+export function DonutChart({ slices, centerValue, centerLabel, formatAction }: { slices: Slice[]; centerValue: string; centerLabel: string; formatAction?: (n: number) => string }) {
   const total = slices.reduce((s, x) => s + x.value, 0);
   if (!total) return <div className="empty">Nothing to show yet.</div>;
   let acc = 0;
@@ -29,7 +29,7 @@ export function DonutChart({ slices, centerValue, centerLabel, format }: { slice
           const el = (
             <circle key={s.label} cx="21" cy="21" r="15.9155" fill="none" stroke={s.color} strokeWidth="5.5"
               strokeDasharray={`${Math.max(0, pct - 0.6)} ${100 - Math.max(0, pct - 0.6)}`} strokeDashoffset={25 - acc}>
-              <title>{`${s.label}: ${format ? format(s.value) : s.value} (${Math.round(pct)}%)`}</title>
+              <title>{`${s.label}: ${formatAction ? formatAction(s.value) : s.value} (${Math.round(pct)}%)`}</title>
             </circle>
           );
           acc += pct;
@@ -40,7 +40,7 @@ export function DonutChart({ slices, centerValue, centerLabel, format }: { slice
       </svg>
       <ul className="legend">
         {slices.map((s) => (
-          <li key={s.label}><i style={{ background: s.color }} /><span>{s.label}</span><b>{format ? format(s.value) : s.value.toLocaleString("en-IN")}</b><em>{Math.round((s.value / total) * 100)}%</em></li>
+          <li key={s.label}><i style={{ background: s.color }} /><span>{s.label}</span><b>{formatAction ? formatAction(s.value) : s.value.toLocaleString("en-IN")}</b><em>{Math.round((s.value / total) * 100)}%</em></li>
         ))}
       </ul>
     </div>

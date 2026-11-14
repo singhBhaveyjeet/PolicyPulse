@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import PolicyPulseApp from "@/components/PolicyPulseApp";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
+// @ts-ignore Next.js processes this global stylesheet import at build time.
 import "./dashboard.css";
 
 export default function DashboardPage() {

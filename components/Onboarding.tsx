@@ -11,20 +11,35 @@ type Props = {
   userEmail: string;
   initial: Profile;
   theme: Theme;
-  onThemeChange: (t: Theme) => void;
-  onDone: (p: Profile) => void;
-  onSkip: () => void;
+  onThemeChangeAction: (t: Theme) => void;
+  onDoneAction: (p: Profile) => Promise<void>;
+  onSkipAction: () => Promise<void>;
 };
 
-export default function Onboarding({ userEmail, initial, theme, onThemeChange, onDone, onSkip }: Props) {
+export default function Onboarding({ userEmail, initial, theme, onThemeChangeAction, onDoneAction, onSkipAction }: Props) {
   const [f, setF] = useState<Profile>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const photoRef = useRef<HTMLInputElement>(null);
   const set = <K extends keyof Profile>(k: K, v: Profile[K]) => setF((p) => ({ ...p, [k]: v }));
   const toggle = (s: string) => set("specialities", f.specialities.includes(s) ? f.specialities.filter((x) => x !== s) : [...f.specialities, s]);
 
+  async function finish(action: () => Promise<void>) {
+    if (saving) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      await action();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Could not save your workspace. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function pickPhoto(file?: File) {
-    if (!file) return;
+    if (!file || saving) return;
     try { set("photo", await resizeImage(file)); } catch (e) { setErrors((x) => ({ ...x, photo: e instanceof Error ? e.message : "Could not use that photo." })); }
     if (photoRef.current) photoRef.current.value = "";
   }
@@ -35,12 +50,20 @@ export default function Onboarding({ userEmail, initial, theme, onThemeChange, o
     if (f.phone.trim() && !cleanPhone(f.phone).valid) e.phone = "Enter a 10-digit Indian mobile number";
     setErrors(e);
     if (Object.keys(e).length) return;
-    onDone({ ...f, name: f.name.trim(), agency: f.agency.trim(), city: f.city.trim(), phone: f.phone.trim() ? cleanPhone(f.phone).display : "", onboarded: true });
+    const profile = {
+      ...f,
+      name: f.name.trim(),
+      agency: f.agency.trim(),
+      city: f.city.trim(),
+      phone: f.phone.trim() ? cleanPhone(f.phone).display : "",
+      onboarded: true,
+    };
+    void finish(() => onDoneAction(profile));
   }
 
   return (
     <div className="onboard" data-theme={theme}>
-      <div className="onboard-card">
+      <div className="onboard-card" aria-busy={saving}>
         <div className="onboard-brand"><div className="brand-icon"><ShieldCheck size={22} /></div><div><strong>PolicyPulse</strong><small>DATA INTELLIGENCE</small></div></div>
         <h1>Welcome! Let’s set up your workspace</h1>
         <p className="onboard-sub">A few quick details so PolicyPulse can personalise your messages and dashboard. You can change all of this later in Settings.</p>
@@ -48,39 +71,40 @@ export default function Onboarding({ userEmail, initial, theme, onThemeChange, o
         <div className="photo-row">
           <Avatar photo={f.photo} name={f.name || userEmail} className="photo-preview" />
           <div>
-            <div className="photo-actions"><button type="button" className="btn secondary" onClick={() => photoRef.current?.click()}><Camera size={14} /> {f.photo ? "Change photo" : "Add a photo (optional)"}</button>
-              {f.photo && <button type="button" className="btn secondary danger" onClick={() => set("photo", "")}>Remove</button>}</div>
+            <div className="photo-actions"><button type="button" className="btn secondary" disabled={saving} onClick={() => photoRef.current?.click()}><Camera size={14} /> {f.photo ? "Change photo" : "Add a photo (optional)"}</button>
+              {f.photo && <button type="button" className="btn secondary danger" disabled={saving} onClick={() => set("photo", "")}>Remove</button>}</div>
             {errors.photo && <small className="field-error">{errors.photo}</small>}
           </div>
-          <input ref={photoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => pickPhoto(e.target.files?.[0])} />
+          <input ref={photoRef} type="file" accept="image/*" style={{ display: "none" }} disabled={saving} onChange={(e) => pickPhoto(e.target.files?.[0])} />
         </div>
 
         <div className="form-grid">
           <label className={errors.name ? "has-error" : ""}>Your name <b className="required">*</b>
-            <input value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Rahul Sharma" autoFocus />{errors.name && <small className="field-error">{errors.name}</small>}</label>
+            <input value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Rahul Sharma" autoFocus disabled={saving} />{errors.name && <small className="field-error">{errors.name}</small>}</label>
           <label>Agency / firm name
-            <input value={f.agency} onChange={(e) => set("agency", e.target.value)} placeholder="e.g. Sharma Insurance Services" /></label>
+            <input value={f.agency} onChange={(e) => set("agency", e.target.value)} placeholder="e.g. Sharma Insurance Services" disabled={saving} /></label>
           <label className={errors.phone ? "has-error" : ""}>Mobile number
-            <input value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="10-digit mobile" inputMode="tel" />{errors.phone && <small className="field-error">{errors.phone}</small>}</label>
+            <input value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="10-digit mobile" inputMode="tel" disabled={saving} />{errors.phone && <small className="field-error">{errors.phone}</small>}</label>
           <label>City
-            <input value={f.city} onChange={(e) => set("city", e.target.value)} placeholder="e.g. Kurukshetra" /></label>
+            <input value={f.city} onChange={(e) => set("city", e.target.value)} placeholder="e.g. Kurukshetra" disabled={saving} /></label>
         </div>
 
         <div className="onboard-block">
           <b>What do you mostly sell?</b><small>Pick all that apply</small>
-          <div className="chip-select">{SPECIALITIES.map((s) => <button key={s} type="button" className={`pick ${f.specialities.includes(s) ? "on" : ""}`} aria-pressed={f.specialities.includes(s)} onClick={() => toggle(s)}>{s}</button>)}</div>
+          <div className="chip-select">{SPECIALITIES.map((s) => <button key={s} type="button" className={`pick ${f.specialities.includes(s) ? "on" : ""}`} aria-pressed={f.specialities.includes(s)} disabled={saving} onClick={() => toggle(s)}>{s}</button>)}</div>
         </div>
 
         <div className="onboard-block">
           <b>Choose your look</b><small>Applies to the dashboard. Change it any time in Settings.</small>
-          <ThemePicker value={theme} onChange={onThemeChange} />
+          <ThemePicker value={theme} onChangeAction={onThemeChangeAction} disabled={saving} />
         </div>
 
         <div className="onboard-actions">
-          <button type="button" className="text-action" onClick={onSkip}>Skip for now</button>
-          <button type="button" className="btn primary" onClick={submit}>Continue to dashboard <ArrowRight size={15} /></button>
+          <button type="button" className="text-action" disabled={saving} onClick={() => { void finish(onSkipAction); }}>{saving ? "Saving…" : "Skip for now"}</button>
+          <button type="button" className="btn primary" disabled={saving} onClick={submit}>{saving ? "Saving…" : "Continue to dashboard"} <ArrowRight size={15} /></button>
         </div>
-        <p className="onboard-foot"><ShieldCheck size={12} /> Signed in as {userEmail}. Your details stay in this browser.</p>
+        {saveError && <p className="field-error" role="alert">{saveError}</p>}
+        <p className="onboard-foot"><ShieldCheck size={12} /> Signed in as {userEmail}. Your workspace is saved to your private Supabase account.</p>
       </div>
     </div>
   );
