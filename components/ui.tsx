@@ -47,14 +47,14 @@ export function StatusPill({ policy }: { policy: Policy }) {
   return <span className={`status status-${st.toLowerCase().replace(/ /g, "-")}`}>{st}</span>;
 }
 
-export function PolicyTable({ policies, onSelect }: { policies: Policy[]; onSelect: (p: Policy) => void }) {
+export function PolicyTable({ policies, onSelectAction }: { policies: Policy[]; onSelectAction: (p: Policy) => void }) {
   return (
     <div className="table-scroll">
       <table className="policy-table">
         <thead><tr><th>CUSTOMER</th><th>POLICY NUMBER</th><th>INSURER</th><th>TYPE</th><th>EXPIRY DATE</th><th>PREMIUM</th><th>STATUS</th><th /></tr></thead>
         <tbody>
           {policies.map((p, i) => (
-            <tr key={p.id} onClick={() => onSelect(p)}>
+            <tr key={p.id} onClick={() => onSelectAction(p)}>
               <td><div className="table-customer"><div className={`mini-avatar avatar-${i % 5}`}>{initials(p.customerName)}</div><div><b>{p.customerName}</b><span>{p.phone || p.email || "No contact details"}</span></div></div></td>
               <td><code>{p.policyNumber}</code></td>
               <td>{p.insurer}</td>
@@ -106,11 +106,11 @@ export function ColumnChart({ buckets, metric = "count" }: { buckets: MonthBucke
   );
 }
 
-export function ThemePicker({ value, onChange }: { value: Theme; onChange: (t: Theme) => void }) {
+export function ThemePicker({ value, onChangeAction, disabled = false }: { value: Theme; onChangeAction: (t: Theme) => void; disabled?: boolean }) {
   return (
     <div className="theme-picker" role="radiogroup" aria-label="Theme">
       {THEMES.map((t) => (
-        <button key={t.id} type="button" role="radio" aria-checked={value === t.id} className={`theme-option ${value === t.id ? "on" : ""}`} onClick={() => onChange(t.id)}>
+        <button key={t.id} type="button" role="radio" aria-checked={value === t.id} className={`theme-option ${value === t.id ? "on" : ""}`} disabled={disabled} onClick={() => onChangeAction(t.id)}>
           <div className="theme-card" data-theme={t.id} aria-hidden="true">
             <i className="tc-side" />
             <div className="tc-main"><b className="tc-title" /><span className="tc-cards"><u /><u /><u /></span><b className="tc-bar" /><b className="tc-bar short" /></div>

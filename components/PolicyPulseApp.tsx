@@ -213,6 +213,18 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
     setToasts((t) => [...t.slice(-2), { id, msg, tone }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200);
   }
+  async function saveOnboardingProfile(nextProfile: Profile) {
+    try {
+      await saveWorkspace(userId, { policies, imports, profile: nextProfile, settings });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not save your workspace.";
+      setSaveError(message);
+      throw new Error(message);
+    }
+    setProfile(nextProfile);
+    setSaveError("");
+    setSavedAt(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }));
+  }
   const stamp = () => new Date().toISOString().slice(0, 10);
   const fileBase = () => `PolicyPulse_${(profile.agency || profile.name || "policies").trim().replace(/[^\w]+/g, "-").replace(/^-|-$/g, "") || "policies"}`;
   function exportRows(list: Policy[], name?: string) {
@@ -258,9 +270,15 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
         userEmail={userEmail}
         initial={{ ...profile, name: profile.name || prettyName(userEmail) }}
         theme={settings.theme}
-        onThemeChange={(t: Theme) => setSettings((s) => ({ ...s, theme: t }))}
-        onDone={(p) => { setProfile(p); notify(`Welcome, ${p.name.split(" ")[0]}! Add your first Excel or CSV file to get started.`); }}
-        onSkip={() => setProfile((p) => ({ ...p, onboarded: true }))}
+        onThemeChangeAction={(t: Theme) => setSettings((s) => ({ ...s, theme: t }))}
+        onDoneAction={async (p) => {
+          await saveOnboardingProfile(p);
+          notify(`Welcome, ${p.name.split(" ")[0]}! Add your first Excel or CSV file to get started.`);
+        }}
+        onSkipAction={async () => {
+          await saveOnboardingProfile({ ...profile, onboarded: true });
+          notify("Setup skipped. You can complete your profile later in Settings.");
+        }}
       />
     );
   }
@@ -421,7 +439,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
               <section className="lower">
                 <div className="panel table-panel">
                   <PanelHead title="Most recently imported" subtitle="Latest records from your files" action={<button className="text-action" onClick={() => { setSortBy("imported"); setPage("Policy records"); }}>View all <ArrowRight size={13} /></button>} />
-                  <PolicyTable policies={[...policies].sort((a, b) => b.importedAt.localeCompare(a.importedAt)).slice(0, 5)} onSelect={(p) => setSelectedId(p.id)} />
+                  <PolicyTable policies={[...policies].sort((a, b) => b.importedAt.localeCompare(a.importedAt)).slice(0, 5)} onSelectAction={(p) => setSelectedId(p.id)} />
                 </div>
                 <div className="panel">
                   <PanelHead title="Recent imports" subtitle="Files you have added" />
@@ -501,11 +519,11 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
             <SettingsPage
               key={JSON.stringify([profile, { ...settings, theme: "" }])}
               userEmail={userEmail} profile={profile} settings={settings} policies={policies}
-              onSaveProfile={(p) => { setProfile(p); notify("Profile saved."); }}
-              onSaveSettings={(st) => { setSettings((prev) => ({ ...st, theme: prev.theme })); setWindowF(st.defaultQueueWindow); notify("Preferences saved."); }}
-              onThemeChange={(t) => setSettings((prev) => ({ ...prev, theme: t }))}
-              onDownloadExcel={() => exportRows(policies)} onDownloadBackup={downloadBackup} onRestoreBackup={restoreBackup}
-              onClearAll={clearAll} onSignOut={onSignOutAction} notify={notify}
+              onSaveProfileAction={(p) => { setProfile(p); notify("Profile saved."); }}
+              onSaveSettingsAction={(st) => { setSettings((prev) => ({ ...st, theme: prev.theme })); setWindowF(st.defaultQueueWindow); notify("Preferences saved."); }}
+              onThemeChangeAction={(t) => setSettings((prev) => ({ ...prev, theme: t }))}
+              onDownloadExcelAction={() => exportRows(policies)} onDownloadBackupAction={downloadBackup} onRestoreBackupAction={restoreBackup}
+              onClearAllAction={clearAll} onSignOutAction={onSignOutAction} notifyAction={notify}
             />
           )}
 
@@ -631,7 +649,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
                 </select>
                 <button className="btn secondary" onClick={resetFilters}><SlidersHorizontal size={14} /> Reset</button>
               </div>
-              <PolicyTable policies={pageRows} onSelect={(p) => setSelectedId(p.id)} />
+              <PolicyTable policies={pageRows} onSelectAction={(p) => setSelectedId(p.id)} />
               <div className="table-footer">
                 Showing <b>{filtered.length ? (safePage - 1) * PAGE_SIZE + 1 : 0}–{Math.min(filtered.length, safePage * PAGE_SIZE)}</b> of <b>{filtered.length.toLocaleString("en-IN")}</b> matching ({policies.length.toLocaleString("en-IN")} total)
                 <span className="pager">
@@ -709,7 +727,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
       )}
 
       {showImport && <ImportModal existing={policies} onDoneAction={onImported} onCloseAction={() => setShowImport(false)} />}
-      {form && <PolicyForm editing={form.editing} existing={policies} onSave={savePolicy} onClose={() => setForm(null)} />}
+      {form && <PolicyForm editing={form.editing} existing={policies} onSaveAction={savePolicy} onCloseAction={() => setForm(null)} />}
       <div className="toasts" aria-live="polite">
         {toasts.map((t) => <div key={t.id} className={`toast ${t.tone}`}>{t.tone === "ok" ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}<span>{t.msg}</span></div>)}
       </div>

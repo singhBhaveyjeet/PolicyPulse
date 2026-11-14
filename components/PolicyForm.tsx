@@ -9,13 +9,13 @@ import { FOLLOW_UP_LABEL } from "@/lib/analysis";
 type Props = {
   editing: Policy | null; // null = add a new policy
   existing: Policy[];
-  onSave: (p: Policy) => void;
-  onClose: () => void;
+  onSaveAction: (p: Policy) => void;
+  onCloseAction: () => void;
 };
 
 const COMMON_TYPES = ["Motor", "Health", "Life", "Property", "Travel", "Marine", "Personal Accident"];
 
-export default function PolicyForm({ editing, existing, onSave, onClose }: Props) {
+export default function PolicyForm({ editing, existing, onSaveAction, onCloseAction }: Props) {
   const [f, setF] = useState({
     customerName: editing?.customerName ?? "",
     phone: editing?.phone ?? "",
@@ -25,12 +25,20 @@ export default function PolicyForm({ editing, existing, onSave, onClose }: Props
     policyType: editing && editing.policyType !== "Other" ? editing.policyType : "",
     startDate: editing?.startDate ?? "",
     expiryDate: editing?.expiryDate ?? "",
-    premium: editing?.premium ? String(editing.premium) : "",
-    followUp: (editing?.followUp ?? "pending") as FollowUp,
+    premium: editing ? String(editing.premium) : "",
+    followUp: editing?.followUp ?? "pending",
     note: editing?.note ?? "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const set = (k: keyof typeof f, v: string) => setF((p) => ({ ...p, [k]: v }));
+  const set = (k: keyof typeof f, v: string) => {
+    setF((p) => ({ ...p, [k]: v }));
+    setErrors((previous) => {
+      if (!previous[k]) return previous;
+      const next = { ...previous };
+      delete next[k];
+      return next;
+    });
+  };
 
   const insurerOptions = Array.from(new Set(existing.map((p) => p.insurer).filter((i) => i !== "Unassigned")));
   const typeOptions = Array.from(new Set([...COMMON_TYPES, ...existing.map((p) => p.policyType).filter((t) => t !== "Other")]));
@@ -40,18 +48,23 @@ export default function PolicyForm({ editing, existing, onSave, onClose }: Props
     const name = cleanText(f.customerName);
     const number = cleanText(f.policyNumber);
     const expiry = toISODate(f.expiryDate);
+    const startDate = toISODate(f.startDate);
     const phone = cleanPhone(f.phone);
     const email = f.email.trim() ? cleanEmail(f.email) : "";
+    const premium = f.premium.trim() ? Number(f.premium) : 0;
     const spelling = insurerOptions.find((i) => textKey(i) === textKey(f.insurer));
     const insurer = spelling ?? (cleanText(f.insurer) || "Unassigned");
 
     if (!name) e.customerName = "Enter the customer's name";
     if (!number) e.policyNumber = "Enter the policy number";
-    if (!expiry) e.expiryDate = "Choose the expiry date";
+    if (!expiry) e.expiryDate = "Choose a valid expiry date";
     if (f.phone.trim() && !phone.valid) e.phone = "Enter a 10-digit Indian mobile number";
     if (f.email.trim() && !email) e.email = "That email address does not look right";
-    if (f.startDate && f.expiryDate && f.startDate > f.expiryDate) e.startDate = "Start date is after the expiry date";
-    if (f.premium.trim() && !(Number(f.premium) >= 0)) e.premium = "Enter a valid amount";
+    if (f.startDate && !startDate) e.startDate = "Choose a valid start date";
+    else if (startDate && expiry && startDate > expiry) e.startDate = "Start date is after the expiry date";
+    if (f.premium.trim() && (!Number.isFinite(premium) || premium < 0 || premium > 999999999999.99)) {
+      e.premium = "Enter an amount between ₹0 and ₹999,999,999,999.99";
+    }
     if (number) {
       const key = makePolicyKey(insurer, number);
       const clash = existing.find((p) => p.id !== editing?.id && makePolicyKey(p.insurer, p.policyNumber) === key);
@@ -64,7 +77,7 @@ export default function PolicyForm({ editing, existing, onSave, onClose }: Props
       id: newId("pol"), customerName: "", phone: "", email: "", policyNumber: "", insurer: "", policyType: "", startDate: "", expiryDate: "",
       premium: 0, sourceFile: "Added manually", sourceSheet: "Manual entry", sourceRow: 0, importedAt: todayISO(), importId: "manual", followUp: "pending", note: "",
     };
-    onSave({
+    onSaveAction({
       ...base,
       customerName: name,
       phone: f.phone.trim() ? phone.display : "",
@@ -72,10 +85,10 @@ export default function PolicyForm({ editing, existing, onSave, onClose }: Props
       policyNumber: number,
       insurer,
       policyType: normalizePolicyType(f.policyType) || "Other",
-      startDate: toISODate(f.startDate),
+      startDate,
       expiryDate: expiry,
-      premium: f.premium.trim() ? Math.round(Number(f.premium) * 100) / 100 : 0,
-      followUp: f.followUp,
+      premium: Math.round(premium * 100) / 100,
+      followUp: editing && expiry !== editing.expiryDate ? "pending" : f.followUp,
       note: f.note.trim(),
     });
   }
@@ -83,14 +96,14 @@ export default function PolicyForm({ editing, existing, onSave, onClose }: Props
   const err = (k: string) => (errors[k] ? <small className="field-error">{errors[k]}</small> : null);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={onCloseAction}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div className="modal-title">
             <div className="hero-icon">{editing ? <Save size={20} /> : <PlusCircle size={20} />}</div>
             <div><h2>{editing ? "Edit policy" : "Add a new policy"}</h2><p>{editing ? "Changes are saved straight away and included in your next Excel download." : "Enter one policy by hand. It joins your data and your analysis instantly."}</p></div>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
+          <button className="icon-button" onClick={onCloseAction} aria-label="Close"><X size={18} /></button>
         </div>
 
         <div className="form-grid">
@@ -111,9 +124,10 @@ export default function PolicyForm({ editing, existing, onSave, onClose }: Props
           <label className={errors.startDate ? "has-error" : ""}>Start date
             <input type="date" value={f.startDate} onChange={(e) => set("startDate", e.target.value)} />{err("startDate")}</label>
           <label className={errors.expiryDate ? "has-error" : ""}>Expiry / renewal date <b className="required">*</b>
-            <input type="date" value={f.expiryDate} onChange={(e) => set("expiryDate", e.target.value)} />{err("expiryDate")}</label>
+            <input type="date" value={f.expiryDate} onChange={(e) => set("expiryDate", e.target.value)} />{err("expiryDate")}
+            {editing && f.expiryDate && f.expiryDate !== editing.expiryDate && <small className="sub-note">Changing expiry starts a new renewal cycle and resets follow-up to To contact.</small>}</label>
           <label className={errors.premium ? "has-error" : ""}>Premium (₹)
-            <input type="number" min="0" step="any" value={f.premium} onChange={(e) => set("premium", e.target.value)} placeholder="e.g. 18450" />{err("premium")}</label>
+            <input type="number" min="0" max="999999999999.99" step="0.01" value={f.premium} onChange={(e) => set("premium", e.target.value)} placeholder="e.g. 18450" />{err("premium")}</label>
           <label>Follow-up status
             <select value={f.followUp} onChange={(e) => set("followUp", e.target.value)}>
               {(Object.keys(FOLLOW_UP_LABEL) as FollowUp[]).map((k) => <option key={k} value={k}>{FOLLOW_UP_LABEL[k]}</option>)}
@@ -125,7 +139,7 @@ export default function PolicyForm({ editing, existing, onSave, onClose }: Props
         <div className="modal-footer">
           <span>Fields marked * are required</span>
           <div>
-            <button className="btn secondary" onClick={onClose}>Cancel</button>
+            <button className="btn secondary" onClick={onCloseAction}>Cancel</button>
             <button className="btn primary" onClick={submit}><Check size={14} /> {editing ? "Save changes" : "Add policy"}</button>
           </div>
         </div>

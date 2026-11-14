@@ -12,15 +12,15 @@ type Props = {
   profile: Profile;
   settings: Settings;
   policies: Policy[];
-  onSaveProfile: (p: Profile) => void;
-  onSaveSettings: (s: Settings) => void;
-  onThemeChange: (t: Theme) => void;
-  onDownloadExcel: () => void;
-  onDownloadBackup: () => void;
-  onRestoreBackup: (file: File) => void;
-  onClearAll: () => void;
-  onSignOut: () => void;
-  notify: (msg: string, tone?: "ok" | "error") => void;
+  onSaveProfileAction: (p: Profile) => void;
+  onSaveSettingsAction: (s: Settings) => void;
+  onThemeChangeAction: (t: Theme) => void;
+  onDownloadExcelAction: () => void;
+  onDownloadBackupAction: () => void;
+  onRestoreBackupAction: (file: File) => void;
+  onClearAllAction: () => void;
+  onSignOutAction: () => void;
+  notifyAction: (msg: string, tone?: "ok" | "error") => void;
 };
 
 const SAMPLE: Policy = {
@@ -30,7 +30,7 @@ const SAMPLE: Policy = {
 };
 
 export default function SettingsPage(props: Props) {
-  const { userEmail, policies, notify } = props;
+  const { userEmail, policies, notifyAction } = props;
   const [profile, setProfile] = useState<Profile>(props.profile);
   const [settings, setSettings] = useState<Settings>(props.settings);
   const photoRef = useRef<HTMLInputElement>(null);
@@ -46,7 +46,7 @@ export default function SettingsPage(props: Props) {
   async function pickPhoto(file?: File) {
     if (!file) return;
     try { setProfile((p) => ({ ...p, photo: "" })); const photo = await resizeImage(file); setProfile((p) => ({ ...p, photo })); }
-    catch (e) { notify(e instanceof Error ? e.message : "Could not use that photo.", "error"); }
+    catch (e) { notifyAction(e instanceof Error ? e.message : "Could not use that photo.", "error"); }
     if (photoRef.current) photoRef.current.value = "";
   }
 
@@ -76,7 +76,7 @@ export default function SettingsPage(props: Props) {
           <div className="onboard-block flush"><b>What you mostly sell</b>
             <div className="chip-select">{SPECIALITIES.map((sp) => <button key={sp} type="button" className={`pick ${profile.specialities.includes(sp) ? "on" : ""}`} aria-pressed={profile.specialities.includes(sp)} onClick={() => setProfile({ ...profile, specialities: profile.specialities.includes(sp) ? profile.specialities.filter((x) => x !== sp) : [...profile.specialities, sp] })}>{sp}</button>)}</div></div>
           <div className="settings-actions">
-            <button className="btn primary" disabled={!profileDirty} onClick={() => props.onSaveProfile({ ...profile, name: profile.name.trim(), agency: profile.agency.trim(), phone: profile.phone.trim() })}><Save size={14} /> Save profile</button>
+            <button className="btn primary" disabled={!profileDirty} onClick={() => props.onSaveProfileAction({ ...profile, name: profile.name.trim(), agency: profile.agency.trim(), phone: profile.phone.trim() })}><Save size={14} /> Save profile</button>
             {profileDirty && <button className="btn secondary" onClick={() => setProfile(props.profile)}>Discard changes</button>}
           </div>
         </div>
@@ -84,7 +84,7 @@ export default function SettingsPage(props: Props) {
 
       <section className="panel">
         <PanelHead title="Appearance" subtitle="Choose a dark or light look for the dashboard. It applies instantly." action={<Palette size={18} className="muted" />} />
-        <div className="settings-body"><ThemePicker value={props.settings.theme} onChange={props.onThemeChange} /></div>
+        <div className="settings-body"><ThemePicker value={props.settings.theme} onChangeAction={props.onThemeChangeAction} /></div>
       </section>
 
       <section className="panel">
@@ -110,7 +110,7 @@ export default function SettingsPage(props: Props) {
           </div>
           <div className="msg-preview"><small>PREVIEW{policies[0] ? "" : " (sample customer)"}</small><p>{preview}</p></div>
           <div className="settings-actions">
-            <button className="btn primary" disabled={!settingsDirty} onClick={() => props.onSaveSettings({ ...settings, whatsappTemplate: settings.whatsappTemplate.trim() || DEFAULT_TEMPLATE })}><Save size={14} /> Save preferences</button>
+            <button className="btn primary" disabled={!settingsDirty} onClick={() => props.onSaveSettingsAction({ ...settings, whatsappTemplate: settings.whatsappTemplate.trim() || DEFAULT_TEMPLATE })}><Save size={14} /> Save preferences</button>
             {settingsDirty && <button className="btn secondary" onClick={() => setSettings(props.settings)}>Discard changes</button>}
           </div>
         </div>
@@ -120,12 +120,12 @@ export default function SettingsPage(props: Props) {
         <PanelHead title="Data & backup" subtitle={`${policies.length.toLocaleString("en-IN")} policies are stored in your Supabase workspace`} action={<Database size={18} className="muted" />} />
         <div className="settings-body">
           <div className="data-row"><div><b>Download updated Excel</b><span>All policies, including entries you added or edited. The file can be imported again.</span></div>
-            <button className="btn primary" disabled={!policies.length} onClick={props.onDownloadExcel}><Download size={14} /> Download .xlsx</button></div>
+            <button className="btn primary" disabled={!policies.length} onClick={props.onDownloadExcelAction}><Download size={14} /> Download .xlsx</button></div>
           <div className="data-row"><div><b>Full backup</b><span>Policies, import history, profile and preferences in one file you can restore later or on another computer.</span></div>
-            <button className="btn secondary" onClick={props.onDownloadBackup}><Download size={14} /> Download backup</button></div>
+            <button className="btn secondary" onClick={props.onDownloadBackupAction}><Download size={14} /> Download backup</button></div>
           <div className="data-row"><div><b>Restore from backup</b><span>Replaces everything in this browser with the contents of a PolicyPulse backup file.</span></div>
             <button className="btn secondary" onClick={() => restoreRef.current?.click()}><Upload size={14} /> Choose backup file</button>
-            <input ref={restoreRef} type="file" accept=".json,application/json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) props.onRestoreBackup(f); if (restoreRef.current) restoreRef.current.value = ""; }} /></div>
+            <input ref={restoreRef} type="file" accept=".json,application/json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) props.onRestoreBackupAction(f); if (restoreRef.current) restoreRef.current.value = ""; }} /></div>
         </div>
       </section>
 
@@ -133,9 +133,9 @@ export default function SettingsPage(props: Props) {
         <PanelHead title="Account" subtitle="Session and danger zone" />
         <div className="settings-body">
           <div className="data-row"><div><b>Sign out</b><span>You can sign back in with the same email to see your data again.</span></div>
-            <button className="btn secondary" onClick={props.onSignOut}><LogOut size={14} /> Sign out</button></div>
+            <button className="btn secondary" onClick={props.onSignOutAction}><LogOut size={14} /> Sign out</button></div>
           <div className="data-row"><div><b>Delete all data</b><span>Removes every policy and import record from your workspace. Your profile and preferences stay. Download a backup first.</span></div>
-            <button className="btn secondary danger" onClick={props.onClearAll}><Trash2 size={14} /> Delete everything</button></div>
+            <button className="btn secondary danger" onClick={props.onClearAllAction}><Trash2 size={14} /> Delete everything</button></div>
         </div>
       </section>
     </div>
