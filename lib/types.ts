@@ -1,4 +1,4 @@
-export type FollowUp = "pending" | "contacted" | "renewed" | "lost";
+export type FollowUp = "pending" | "contacted" | "interested" | "renewed" | "lost";
 
 export type Policy = {
   id: string;

@@ -98,7 +98,7 @@ const serialOf = (iso: string) => {
   return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000);
 };
 
-const FOLLOW_LABEL: Record<string, string> = { pending: "To contact", contacted: "Contacted", renewed: "Renewed", lost: "Lost" };
+const FOLLOW_LABEL: Record<string, string> = { pending: "To contact", contacted: "Contacted", interested: "Interested / follow-up", renewed: "Renewed", lost: "Lost" };
 
 /**
  * Writes the current policies to an Excel file. The first columns use the same titles as the

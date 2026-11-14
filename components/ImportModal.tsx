@@ -114,7 +114,7 @@ export default function ImportModal({ existing, onCloseAction, onDoneAction }: P
           <button className="icon-button" onClick={onCloseAction} aria-label="Close"><X size={18} /></button>
         </div>
 
-        <div className="notice"><ShieldCheck size={15} /><span><b>Private by design</b> · Files are read inside this browser and saved only on this device. Nothing is uploaded to a server.</span></div>
+        <div className="notice"><ShieldCheck size={15} /><span><b>Private by design</b> · The source file is read in your browser; imported policy records are saved to your authenticated Supabase workspace.</span></div>
 
         <input ref={inputRef} type="file" multiple accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={(e) => handleFiles(e.target.files)} />
 

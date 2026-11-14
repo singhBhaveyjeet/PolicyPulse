@@ -22,7 +22,7 @@ create table if not exists public.policy_records (
   source_row integer not null default 0 check (source_row >= 0),
   imported_at timestamptz not null default now(),
   import_id text not null default 'manual',
-  follow_up text not null default 'pending' check (follow_up in ('pending', 'contacted', 'renewed', 'lost')),
+  follow_up text not null default 'pending' check (follow_up in ('pending', 'contacted', 'interested', 'renewed', 'lost')),
   note text not null default '',
   primary key (user_id, id)
 );

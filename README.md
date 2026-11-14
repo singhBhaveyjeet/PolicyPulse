@@ -9,15 +9,13 @@ and turns them into one searchable, traceable view with live renewal analysis.
 2. **Add files**: choose one or many `.xlsx`, `.xls` or `.csv` files. Every visible sheet is read.
 3. **Match columns**: PolicyPulse finds the header row (even under a title row), suggests which column is which
    (`Insured Name`, `Mobile No`, `Policy Expiry Date`… dozens of aliases), and shows exactly how the first rows will be read.
-4. **Import & analyse**: the Overview fills with insights, renewals by month, insurer/type/premium analysis, a renewal
-   queue and a data-quality report.
+4. **Import & analyse**: the Overview fills with insights, a Top 20 priority worklist, renewal demand by month, and insurer/type/premium analysis.
 5. **Work the queue**: call, WhatsApp (message pre-filled) or email each customer and mark them
-   *To contact / Contacted / Renewed / Lost*, with notes. Closed policies leave the queue and the "at risk" totals.
+   *To contact / Contacted / Interested / Renewed / Lost*, with notes. Closed policies leave the active queue and "at risk" totals.
 6. **Add or edit entries by hand**: **Add policy** opens a form (with duplicate checking); **Edit** in the policy drawer fixes any detail.
 7. **Download the updated Excel** at any time (**Download Excel**). It includes new and edited entries, real date and number
    cells, and the same column titles as the import template, so it can be imported again.
-8. **Analytics charts**: renewals over time (6/12/24 months, policies or premium), donuts for insurer, policy type,
-   urgency and follow-up progress, premium bars, top customers and data quality.
+8. **Analytics intelligence**: filter by expiry-date range, insurer, policy type, follow-up status and premium; review portfolio KPIs, the renewal funnel, expiry trend, insurer/category performance, rule-based business insights and a data-quality center.
 9. **Settings**: profile name, agency, phone and photo, queue and table preferences, editable WhatsApp message template,
    full backup / restore (JSON), delete all data.
 10. **Light and dark themes** for the dashboard (not the landing, login or signup pages). Light is a warm cream palette
@@ -49,8 +47,10 @@ npm run dev
 Before starting the app:
 
 1. Create a Supabase project and copy its project URL and publishable key into `.env.local`.
-2. Run [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL Editor. The table has row-level security enabled;
+2. Run [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL Editor. The tables have row-level security enabled;
    each authenticated user can only read or modify their own workspace.
+   Existing projects must also run [`supabase/migrations/20261114_interested_follow_up.sql`](./supabase/migrations/20261114_interested_follow_up.sql)
+   before using the **Interested / follow-up** status. This migration only extends the allowed follow-up values; it does not change policy data or access rules.
 3. Configure the Supabase Auth email provider and set the local site URL to `http://localhost:3000`. Add
    `http://localhost:3000/dashboard` and `http://localhost:3000/auth/reset-password` to the allowed redirect URLs.
 4. To enable **Continue with Google**, create a Google OAuth client of type **Web application**. Add your app origin
@@ -67,6 +67,7 @@ Before starting the app:
 app/                      Next.js pages (landing, login, signup, dashboard)
 components/
   PolicyPulseApp.tsx      Workspace: pages, filters, renewal queue, drawer
+  AnalyticsDashboard.tsx  Filterable portfolio, renewal, performance and quality reporting
   ImportModal.tsx         Multi-file import with column matching and preview
   PolicyForm.tsx          Add / edit a single policy
   SettingsPage.tsx        Profile, preferences, backup and restore
@@ -77,13 +78,14 @@ lib/
   normalize.ts            Date/phone/premium/type cleaning, column auto-mapping
   build.ts                Rows → policies, duplicate detection, merge on re-import
   importer.ts             Reads Excel/CSV in the browser (SheetJS), header-row detection
-  analysis.ts             Status tiers, stats, insights, customer grouping, WhatsApp link
+  analysis.ts             Priority scoring, analytics, data-quality checks, customer grouping
   storage.ts              Supabase workspace persistence for the authenticated user
   supabase.ts             Supabase client configuration
   settings.ts             Defaults and the WhatsApp message template engine
   image.ts                Profile photo resizing
 sample-data/              Fictional CSV files
 supabase/schema.sql       Workspace table, grants and row-level security
+supabase/migrations/      Additive database upgrades for existing projects
 ```
 
 ## Operational and privacy notes
@@ -93,6 +95,7 @@ supabase/schema.sql       Workspace table, grants and row-level security
   confirming they are active.
 - Existing records in the previous local-browser version are not uploaded automatically. Export a backup from that
   version and restore it from **Settings → Restore from backup** after signing in. This requires an intentional user action.
+- Analytics use the current policy records and follow-up states. The app does not store historical status snapshots, so it avoids claiming month-over-month conversion changes. Renewal rates are calculated only from records marked Renewed or Lost.
 - There is no multi-agent organization sharing, scheduled reminder delivery, or AI assistant yet.
 - Uses `xlsx@0.18.5` from npm, which has known advisories for untrusted files. For files only you provide this is low risk;
   before a hosted release switch to the maintained SheetJS build.
