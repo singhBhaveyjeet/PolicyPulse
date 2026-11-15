@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Activity, ArrowLeft, ArrowRight, ShieldCheck } from "lucide-react";
+import { Activity, ArrowLeft, ArrowRight, Clock3, FileSpreadsheet, ShieldCheck } from "lucide-react";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import styles from "./AuthForm.module.css";
 
@@ -16,9 +16,16 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
+  const [cursor, setCursor] = useState({ x: -180, y: -180 });
   const isSignup = mode === "signup";
   const isRecovery = mode === "recover";
   const isReset = mode === "reset-password";
+
+  useEffect(() => {
+    const moveCursor = (event: MouseEvent) => setCursor({ x: event.clientX, y: event.clientY });
+    window.addEventListener("mousemove", moveCursor);
+    return () => window.removeEventListener("mousemove", moveCursor);
+  }, []);
 
   useEffect(() => {
     if (!isReset || !isSupabaseConfigured()) return;
@@ -91,58 +98,94 @@ export default function AuthForm({ mode }: AuthFormProps) {
       : isSignup
         ? "Create an account to keep your agency workspace synced and private."
         : "Sign in to continue to your PolicyPulse workspace.";
+  const welcomeEyebrow = isSignup
+    ? "A CLEARER WAY TO WORK STARTS HERE"
+    : isRecovery || isReset
+      ? "WE'RE HERE TO HELP"
+      : "WELCOME BACK";
+  const welcomeTitle = isSignup
+    ? <>Bring your policies<br />into <span>a clearer view.</span></>
+    : isRecovery || isReset
+      ? <>Let’s get you<br /><span>back on track.</span></>
+      : <>Welcome back to<br /><span>your clear picture.</span></>;
+  const welcomeDescription = isSignup
+    ? "Register with PolicyPulse to bring your insurance spreadsheets, customer details and renewal actions together in one organized workspace."
+    : isRecovery || isReset
+      ? "Your PolicyPulse workspace is just a step away. Securely restore access and pick up where you left off."
+      : "Your insurance workflow, all in one place. Sign in to review policies, spot upcoming renewals and find customer details faster.";
 
   return (
     <main className={styles.page}>
+      <div
+        className={styles.cursorGlow}
+        style={{ transform: `translate3d(${cursor.x - 180}px, ${cursor.y - 180}px, 0)` }}
+        aria-hidden="true"
+      />
+      <div className={styles.noise} aria-hidden="true" />
       <div className={styles.backdrop} aria-hidden="true" />
       <Link href="/" className={styles.backLink}><ArrowLeft size={15} /> Back to PolicyPulse</Link>
-      <section className={styles.card}>
-        <Link href="/" className={styles.brand} aria-label="PolicyPulse home">
-          <span className={styles.brandMark}><Activity size={19} strokeWidth={2.5} /></span>
-          <span>Policy<span>Pulse</span></span>
-        </Link>
-        <div className={styles.heading}>
-          <span className={styles.eyebrow}>POLICYPULSE</span>
-          <h1>{title}</h1>
-          <p>{description}</p>
-        </div>
+      <div className={styles.content}>
+        <aside className={styles.welcomePanel}>
+          <div className={styles.welcomeCopy}>
+            <span className={styles.eyebrow}><span className={styles.liveDot} /> {welcomeEyebrow}</span>
+            <h1>{welcomeTitle}</h1>
+            <p>{welcomeDescription}</p>
+          </div>
+          <div className={styles.valueList}>
+            <div className={styles.valueItem}><span><FileSpreadsheet size={17} /></span><div><strong>Your sheets, together</strong><small>One organized view of your portfolio</small></div></div>
+            <div className={styles.valueItem}><span><Clock3 size={17} /></span><div><strong>Renewals, in view</strong><small>Know what needs your attention next</small></div></div>
+            <div className={styles.valueItem}><span><Activity size={17} /></span><div><strong>Details, without the hunt</strong><small>Find policy information when you need it</small></div></div>
+          </div>
+          <div className={styles.welcomeFoot}><ShieldCheck size={15} /> Designed for a more confident insurance workflow</div>
+        </aside>
 
-        <div className={styles.authNotice}>
-          <ShieldCheck size={17} />
-          <p><strong>Protected workspace.</strong> Sign-in is handled by Supabase Auth. Workspace access is restricted by your project’s row-level security policies.</p>
-        </div>
+        <section className={styles.card}>
+          <Link href="/" className={styles.brand} aria-label="PolicyPulse home">
+            <img src="/policypulse-logo.png" alt="PolicyPulse logo" className={styles.logoImage} />
+          </Link>
+          <div className={styles.heading}>
+            <span className={styles.eyebrow}>{isSignup ? "CREATE YOUR WORKSPACE" : isRecovery || isReset ? "ACCOUNT ACCESS" : "YOUR WORKSPACE AWAITS"}</span>
+            <h2>{title}</h2>
+            <p>{description}</p>
+          </div>
 
-        <form className={styles.form} onSubmit={handleSubmit}>
-          {!isReset && <label>
-            Email address
-            <input name="email" type="email" autoComplete="email" placeholder="you@company.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
-          </label>}
-          {!isRecovery && <label>
-            {isReset ? "New password" : "Password"}
-            <input name="password" type="password" autoComplete={isReset || isSignup ? "new-password" : "current-password"} placeholder="At least 8 characters" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} />
-          </label>}
-          {error && <p className={styles.error} role="alert">{error}</p>}
-          {notice && <p className={styles.notice} role="status">{notice}</p>}
-          {!isSupabaseConfigured() && <p className={styles.error} role="alert">Supabase is not configured. Add your project URL and publishable key to <code>.env.local</code>, then restart the app.</p>}
-          <button type="submit" className={styles.submit} disabled={pending || !isSupabaseConfigured()}>
-            {pending ? "Please wait…" : isReset ? "Update password" : isRecovery ? "Send reset link" : isSignup ? "Create account" : "Sign in"} {!pending && <ArrowRight size={16} />}
-          </button>
-        </form>
+          <div className={styles.authNotice}>
+            <ShieldCheck size={17} />
+            <p><strong>Protected workspace.</strong> Sign-in is handled by Supabase Auth. Workspace access is restricted by your project’s row-level security policies.</p>
+          </div>
 
-        {(mode === "login" || mode === "signup") && <>
-          <div className={styles.divider}><span>or</span></div>
-          <button type="button" className={styles.googleButton} onClick={signInWithGoogle} disabled={pending || !isSupabaseConfigured()}>
-            <span aria-hidden="true">G</span> Continue with Google
-          </button>
-        </>}
+          <form className={styles.form} onSubmit={handleSubmit}>
+            {!isReset && <label>
+              Email address
+              <input name="email" type="email" autoComplete="email" placeholder="you@company.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
+            </label>}
+            {!isRecovery && <label>
+              {isReset ? "New password" : "Password"}
+              <input name="password" type="password" autoComplete={isReset || isSignup ? "new-password" : "current-password"} placeholder="At least 8 characters" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} />
+            </label>}
+            {error && <p className={styles.error} role="alert">{error}</p>}
+            {notice && <p className={styles.notice} role="status">{notice}</p>}
+            {!isSupabaseConfigured() && <p className={styles.error} role="alert">Supabase is not configured. Add your project URL and publishable key to <code>.env.local</code>, then restart the app.</p>}
+            <button type="submit" className={styles.submit} disabled={pending || !isSupabaseConfigured()}>
+              {pending ? "Please wait…" : isReset ? "Update password" : isRecovery ? "Send reset link" : isSignup ? "Create account" : "Sign in"} {!pending && <ArrowRight size={16} />}
+            </button>
+          </form>
 
-        {mode === "login" && <p className={styles.switchMode}><Link href="/auth/recover">Forgot password?</Link></p>}
-        {!isReset && <p className={styles.switchMode}>
-          {isSignup ? "Already have an account?" : "New to PolicyPulse?"}{" "}
-          <Link href={isSignup ? "/login" : "/signup"}>{isSignup ? "Log in" : "Create account"}</Link>
-        </p>}
-      </section>
-      <p className={styles.footer}>Your workspace is stored in your configured Supabase project. Do not upload real client records until your project’s access controls and privacy settings are reviewed.</p>
+          {(mode === "login" || mode === "signup") && <>
+            <div className={styles.divider}><span>or</span></div>
+            <button type="button" className={styles.googleButton} onClick={signInWithGoogle} disabled={pending || !isSupabaseConfigured()}>
+              <span aria-hidden="true">G</span> Continue with Google
+            </button>
+          </>}
+
+          {mode === "login" && <p className={styles.switchMode}><Link href="/auth/recover">Forgot password?</Link></p>}
+          {!isReset && <p className={styles.switchMode}>
+            {isSignup ? "Already have an account?" : "New to PolicyPulse?"}{" "}
+            <Link href={isSignup ? "/login" : "/signup"}>{isSignup ? "Log in" : "Create account"}</Link>
+          </p>}
+        </section>
+      </div>
+      <p className={styles.footer}>Your workspace is stored in your configured Supabase project. Review access controls and privacy settings before uploading real client records.</p>
     </main>
   );
 }

@@ -35,7 +35,8 @@
 .noise { pointer-events: none; position: absolute; inset: 0; z-index: -1; opacity: .13; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.16'/%3E%3C/svg%3E"); }
 .nav { position: relative; z-index: 10; max-width: 1240px; height: 88px; margin: auto; padding: 0 34px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,.07); }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: -.7px; font-size: 20px; }
-.brandMark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; color: #09221d; background: var(--mint); box-shadow: 0 0 28px rgba(117,240,209,.16); }
+.logoImage { display: block; width: clamp(200px, 23vw, 420px); height: auto; }
+.footerLogoImage { display: block; width: clamp(150px, 18vw, 260px); height: auto; }
 .brandAccent { color: var(--mint); }
 .navLinks { display: flex; align-items: center; gap: 36px; color: #a7b7bb; font-size: 12px; font-weight: 600; }
 .navLinks a { transition: color .2s; }

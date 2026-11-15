@@ -331,7 +331,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
   return (
     <div className="shell" data-theme={settings.theme}>
       <aside className="sidebar">
-        <div className="brand"><div className="brand-icon"><ShieldCheck size={22} /></div><div><strong>PolicyPulse</strong><small>DATA INTELLIGENCE</small></div></div>
+        <div className="brand"><img src="/policypulse-logo.png" alt="PolicyPulse logo" className="brand-logo" /></div>
         <div className="workspace" role="button" tabIndex={0} title="Open settings" onClick={() => setPage("Settings")} onKeyDown={(e) => { if (e.key === "Enter") setPage("Settings"); }}><Avatar photo={profile.photo} name={userName} className="workspace-avatar" /><div><b>{userName}</b><small>{profile.agency || `${policies.length.toLocaleString("en-IN")} policies`}</small></div><SettingsIcon size={15} /></div>
         {["WORKSPACE", "DATA INTELLIGENCE", "INSIGHTS", "ACCOUNT"].map((group) => (
           <div className="nav-group" key={group}>

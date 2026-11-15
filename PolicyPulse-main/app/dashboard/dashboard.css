@@ -30,6 +30,8 @@
 .sub-note{display:block;margin-top:4px;font-size:8px;color:var(--c-8a97a9)}
 .muted{color:var(--c-9aa5b4)}
 .hero-icon.big{width:56px;height:56px;border-radius:16px;margin:0 auto 14px}
+.brand-logo{display:block;width:min(180px,100%);height:auto}
+.onboard-brand .brand-logo{width:min(220px,100%)}
 
 .empty-hero{text-align:center;padding:42px 24px 0;overflow:hidden}
 .empty-hero h2{font:800 20px Manrope,sans-serif;margin:0 0 10px;color:var(--c-243957)}

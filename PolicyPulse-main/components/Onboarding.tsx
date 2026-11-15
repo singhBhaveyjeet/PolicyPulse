@@ -64,7 +64,7 @@ export default function Onboarding({ userEmail, initial, theme, onThemeChangeAct
   return (
     <div className="onboard" data-theme={theme}>
       <div className="onboard-card" aria-busy={saving}>
-        <div className="onboard-brand"><div className="brand-icon"><ShieldCheck size={22} /></div><div><strong>PolicyPulse</strong><small>DATA INTELLIGENCE</small></div></div>
+        <div className="onboard-brand"><img src="/policypulse-logo.png" alt="PolicyPulse logo" className="brand-logo" /></div>
         <h1>Welcome! Let’s set up your workspace</h1>
         <p className="onboard-sub">A few quick details so PolicyPulse can personalise your messages and dashboard. You can change all of this later in Settings.</p>
 

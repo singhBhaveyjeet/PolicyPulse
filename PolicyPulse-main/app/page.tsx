@@ -64,8 +64,7 @@ export default function HomePage() {
 
       <header className={styles.nav}>
         <a className={styles.brand} href="#top" aria-label="PolicyPulse home">
-          <span className={styles.brandMark}><Activity size={19} strokeWidth={2.5} /></span>
-          <span>Policy<span className={styles.brandAccent}>Pulse</span></span>
+          <img src="/policypulse-logo.png" alt="PolicyPulse logo" className={styles.logoImage} />
         </a>
 
         <nav className={`${styles.navLinks} ${menuOpen ? styles.navLinksOpen : ""}`}>
@@ -199,7 +198,7 @@ export default function HomePage() {
       </section>
 
       <footer className={styles.footer}>
-        <a className={styles.brand} href="#top"><span className={styles.brandMark}><Activity size={18} strokeWidth={2.5} /></span><span>Policy<span className={styles.brandAccent}>Pulse</span></span></a>
+        <a className={styles.brand} href="#top"><img src="/policypulse-logo.png" alt="PolicyPulse logo" className={styles.footerLogoImage} /></a>
         <span>One clear picture of every policy.</span>
         <span>© 2026 PolicyPulse · Prototype experience</span>
       </footer>
