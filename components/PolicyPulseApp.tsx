@@ -17,12 +17,13 @@ import { cleanPhone, textKey } from "@/lib/normalize";
 import ImportModal, { type ImportSummary } from "./ImportModal";
 import { AreaChart } from "./charts";
 import AnalyticsDashboard from "./AnalyticsDashboard";
+import BusinessAnalyticsDashboard from "./BusinessAnalyticsDashboard";
 import PolicyForm from "./PolicyForm";
 import Onboarding from "./Onboarding";
 import SettingsPage from "./SettingsPage";
 import { Avatar, ColumnChart, Pair, PanelHead, PolicyTable, Stat, StatusPill } from "./ui";
 
-type Page = "Overview" | "Policy records" | "Customers" | "Import center" | "Renewal action center" | "Analytics" | "Settings";
+type Page = "Overview" | "Policy records" | "Customers" | "Import center" | "Renewal action center" | "Analytics" | "Business Analytics" | "Settings";
 const nav: { label: Page; icon: typeof Activity; group: string }[] = [
   { label: "Overview", icon: LayoutDashboard, group: "WORKSPACE" },
   { label: "Policy records", icon: FileText, group: "WORKSPACE" },
@@ -30,6 +31,7 @@ const nav: { label: Page; icon: typeof Activity; group: string }[] = [
   { label: "Import center", icon: CloudUpload, group: "DATA INTELLIGENCE" },
   { label: "Renewal action center", icon: CalendarClock, group: "DATA INTELLIGENCE" },
   { label: "Analytics", icon: Activity, group: "INSIGHTS" },
+  { label: "Business Analytics", icon: Gauge, group: "INSIGHTS" },
   { label: "Settings", icon: SettingsIcon, group: "ACCOUNT" },
 ];
 
@@ -306,6 +308,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
     "Import center": "Bring your spreadsheets into one searchable, traceable data layer.",
     "Renewal action center": "Work through renewals from most to least urgent and track each follow-up.",
     Analytics: "Understand premium, exposure and data quality across your book.",
+    "Business Analytics": "See where your premium is concentrated, what renewals are at risk, and which relationships need attention.",
     Settings: "Edit your profile, set preferences and back up your data.",
   };
   const startImport = () => setShowImport(true);
@@ -508,6 +511,16 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
               insurers={insurerNames}
               policyTypes={typeNames}
               onSelectPolicyAction={setSelectedId}
+            />
+          )}
+
+          {/* ---------------- BUSINESS ANALYTICS ---------------- */}
+          {page === "Business Analytics" && (
+            <BusinessAnalyticsDashboard
+              policies={policies}
+              today={priorityToday}
+              onSelectPolicyAction={setSelectedId}
+              onImportAction={startImport}
             />
           )}
 

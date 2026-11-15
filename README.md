@@ -16,13 +16,14 @@ and turns them into one searchable, traceable view with live renewal analysis.
 7. **Download the updated Excel** at any time (**Download Excel**). It includes new and edited entries, real date and number
    cells, and the same column titles as the import template, so it can be imported again.
 8. **Analytics intelligence**: filter by expiry-date range, insurer, policy type, follow-up status and premium; review portfolio KPIs, the renewal funnel, expiry trend, insurer/category performance, rule-based business insights and a data-quality center.
-9. **Settings**: profile name, agency, phone and photo, queue and table preferences, editable WhatsApp message template,
+9. **Business Analytics**: review portfolio premium, renewal exposure (expired open policies plus open renewals due within 30 days), the upcoming monthly renewal forecast, priority policies, insurer/type concentration and grouped customer value.
+10. **Settings**: profile name, agency, phone and photo, queue and table preferences, editable WhatsApp message template,
    full backup / restore (JSON), delete all data.
-10. **Light and dark themes** for the dashboard (not the landing, login or signup pages). Light is a warm cream palette
+11. **Light and dark themes** for the dashboard (not the landing, login or signup pages). Light is a warm cream palette
     with a mauve accent; dark is near-black with a green accent. Chosen during first-time setup and in **Settings → Appearance**.
-11. **First-time setup** after login: name, agency, mobile, city, what you sell, optional photo and theme. It can be skipped
+12. **First-time setup** after login: name, agency, mobile, city, what you sell, optional photo and theme. It can be skipped
     and edited later in Settings.
-12. **Come back any time**: policies, imports, profile and preferences are saved to the signed-in Supabase workspace.
+13. **Come back any time**: policies, imports, profile and preferences are saved to the signed-in Supabase workspace.
    Re-upload newer files and matching policies are **updated**, not duplicated.
 
 ## What it cleans automatically
@@ -68,6 +69,7 @@ app/                      Next.js pages (landing, login, signup, dashboard)
 components/
   PolicyPulseApp.tsx      Workspace: pages, filters, renewal queue, drawer
   AnalyticsDashboard.tsx  Filterable portfolio, renewal, performance and quality reporting
+  BusinessAnalyticsDashboard.tsx  Business health, renewal risk, concentration and customer opportunities
   ImportModal.tsx         Multi-file import with column matching and preview
   PolicyForm.tsx          Add / edit a single policy
   SettingsPage.tsx        Profile, preferences, backup and restore
@@ -79,6 +81,7 @@ lib/
   build.ts                Rows → policies, duplicate detection, merge on re-import
   importer.ts             Reads Excel/CSV in the browser (SheetJS), header-row detection
   analysis.ts             Priority scoring, analytics, data-quality checks, customer grouping
+  businessAnalytics.ts    Business metrics and actionable observations from policy records
   storage.ts              Supabase workspace persistence for the authenticated user
   supabase.ts             Supabase client configuration
   settings.ts             Defaults and the WhatsApp message template engine
