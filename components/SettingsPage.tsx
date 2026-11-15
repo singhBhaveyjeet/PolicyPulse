@@ -6,20 +6,21 @@ import { DEFAULT_TEMPLATE, SPECIALITIES, TEMPLATE_TAGS, renderTemplate } from "@
 import { resizeImage } from "@/lib/image";
 import { daysLeft } from "@/lib/analysis";
 import { Avatar, PanelHead, ThemePicker } from "./ui";
+import { InlineSpinner } from "./Loading";
 
 type Props = {
   userEmail: string;
   profile: Profile;
   settings: Settings;
   policies: Policy[];
-  onSaveProfileAction: (p: Profile) => void;
-  onSaveSettingsAction: (s: Settings) => void;
+  onSaveProfileAction: (p: Profile) => Promise<void>;
+  onSaveSettingsAction: (s: Settings) => Promise<void>;
   onThemeChangeAction: (t: Theme) => void;
-  onDownloadExcelAction: () => void;
-  onDownloadBackupAction: () => void;
-  onRestoreBackupAction: (file: File) => void;
-  onClearAllAction: () => void;
-  onSignOutAction: () => void;
+  onDownloadExcelAction: () => Promise<void>;
+  onDownloadBackupAction: () => Promise<void>;
+  onRestoreBackupAction: (file: File) => Promise<void>;
+  onClearAllAction: () => Promise<void>;
+  onSignOutAction: () => Promise<void>;
   notifyAction: (msg: string, tone?: "ok" | "error") => void;
 };
 
@@ -33,6 +34,9 @@ export default function SettingsPage(props: Props) {
   const { userEmail, policies, notifyAction } = props;
   const [profile, setProfile] = useState<Profile>(props.profile);
   const [settings, setSettings] = useState<Settings>(props.settings);
+  const [busyActions, setBusyActions] = useState<string[]>([]);
+  const [actionError, setActionError] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
   const restoreRef = useRef<HTMLInputElement>(null);
 
@@ -43,11 +47,25 @@ export default function SettingsPage(props: Props) {
   const preview = renderTemplate(settings.whatsappTemplate, sample, profile.name, daysLeft(sample.expiryDate));
   const displayName = profile.name || userEmail.split("@")[0];
 
+  async function runAction(action: string, operation: () => Promise<void>) {
+    if (busyActions.includes(action)) return;
+    setBusyActions((current) => [...current, action]);
+    setActionError("");
+    try { await operation(); }
+    catch (error) { setActionError(error instanceof Error ? error.message : "The action could not be completed. Please try again."); }
+    finally { setBusyActions((current) => current.filter((item) => item !== action)); }
+  }
+
+  const busy = (action: string) => busyActions.includes(action);
   async function pickPhoto(file?: File) {
-    if (!file) return;
-    try { setProfile((p) => ({ ...p, photo: "" })); const photo = await resizeImage(file); setProfile((p) => ({ ...p, photo })); }
+    if (!file || photoBusy) return;
+    setPhotoBusy(true);
+    try { const photo = await resizeImage(file); setProfile((p) => ({ ...p, photo })); }
     catch (e) { notifyAction(e instanceof Error ? e.message : "Could not use that photo.", "error"); }
-    if (photoRef.current) photoRef.current.value = "";
+    finally {
+      setPhotoBusy(false);
+      if (photoRef.current) photoRef.current.value = "";
+    }
   }
 
   return (
@@ -59,12 +77,12 @@ export default function SettingsPage(props: Props) {
             <Avatar photo={profile.photo} name={displayName} className="photo-preview" />
             <div>
               <div className="photo-actions">
-                <button className="btn secondary" onClick={() => photoRef.current?.click()}><Camera size={14} /> {profile.photo ? "Change photo" : "Upload photo"}</button>
-                {profile.photo && <button className="btn secondary danger" onClick={() => setProfile({ ...profile, photo: "" })}>Remove</button>}
+                <button className="btn secondary" onClick={() => photoRef.current?.click()} disabled={photoBusy}>{photoBusy ? <><InlineSpinner /> Preparing…</> : <><Camera size={14} /> {profile.photo ? "Change photo" : "Upload photo"}</>}</button>
+                {profile.photo && <button className="btn secondary danger" onClick={() => setProfile({ ...profile, photo: "" })} disabled={photoBusy}>Remove</button>}
               </div>
               <small>JPG or PNG. It is resized and stored in your Supabase workspace.</small>
             </div>
-            <input ref={photoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => pickPhoto(e.target.files?.[0])} />
+            <input ref={photoRef} type="file" accept="image/*" style={{ display: "none" }} disabled={photoBusy} onChange={(e) => pickPhoto(e.target.files?.[0])} />
           </div>
           <div className="form-grid">
             <label>Your name<input value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} placeholder="e.g. Rahul Sharma" /></label>
@@ -76,7 +94,9 @@ export default function SettingsPage(props: Props) {
           <div className="onboard-block flush"><b>What you mostly sell</b>
             <div className="chip-select">{SPECIALITIES.map((sp) => <button key={sp} type="button" className={`pick ${profile.specialities.includes(sp) ? "on" : ""}`} aria-pressed={profile.specialities.includes(sp)} onClick={() => setProfile({ ...profile, specialities: profile.specialities.includes(sp) ? profile.specialities.filter((x) => x !== sp) : [...profile.specialities, sp] })}>{sp}</button>)}</div></div>
           <div className="settings-actions">
-            <button className="btn primary" disabled={!profileDirty} onClick={() => props.onSaveProfileAction({ ...profile, name: profile.name.trim(), agency: profile.agency.trim(), phone: profile.phone.trim() })}><Save size={14} /> Save profile</button>
+            <button className="btn primary" disabled={!profileDirty || busy("profile")} onClick={() => { void runAction("profile", () => props.onSaveProfileAction({ ...profile, name: profile.name.trim(), agency: profile.agency.trim(), phone: profile.phone.trim() })); }}>
+              {busy("profile") ? <><InlineSpinner /> Saving…</> : <><Save size={14} /> Save profile</>}
+            </button>
             {profileDirty && <button className="btn secondary" onClick={() => setProfile(props.profile)}>Discard changes</button>}
           </div>
         </div>
@@ -110,7 +130,9 @@ export default function SettingsPage(props: Props) {
           </div>
           <div className="msg-preview"><small>PREVIEW{policies[0] ? "" : " (sample customer)"}</small><p>{preview}</p></div>
           <div className="settings-actions">
-            <button className="btn primary" disabled={!settingsDirty} onClick={() => props.onSaveSettingsAction({ ...settings, whatsappTemplate: settings.whatsappTemplate.trim() || DEFAULT_TEMPLATE })}><Save size={14} /> Save preferences</button>
+            <button className="btn primary" disabled={!settingsDirty || busy("settings")} onClick={() => { void runAction("settings", () => props.onSaveSettingsAction({ ...settings, whatsappTemplate: settings.whatsappTemplate.trim() || DEFAULT_TEMPLATE })); }}>
+              {busy("settings") ? <><InlineSpinner /> Saving…</> : <><Save size={14} /> Save preferences</>}
+            </button>
             {settingsDirty && <button className="btn secondary" onClick={() => setSettings(props.settings)}>Discard changes</button>}
           </div>
         </div>
@@ -120,12 +142,22 @@ export default function SettingsPage(props: Props) {
         <PanelHead title="Data & backup" subtitle={`${policies.length.toLocaleString("en-IN")} policies are stored in your Supabase workspace`} action={<Database size={18} className="muted" />} />
         <div className="settings-body">
           <div className="data-row"><div><b>Download updated Excel</b><span>All policies, including entries you added or edited. The file can be imported again.</span></div>
-            <button className="btn primary" disabled={!policies.length} onClick={props.onDownloadExcelAction}><Download size={14} /> Download .xlsx</button></div>
+            <button className="btn primary" disabled={!policies.length || busy("excel")} onClick={() => { void runAction("excel", props.onDownloadExcelAction); }}>
+              {busy("excel") ? <><InlineSpinner /> Exporting…</> : <><Download size={14} /> Download .xlsx</>}
+            </button></div>
           <div className="data-row"><div><b>Full backup</b><span>Policies, import history, profile and preferences in one file you can restore later or on another computer.</span></div>
-            <button className="btn secondary" onClick={props.onDownloadBackupAction}><Download size={14} /> Download backup</button></div>
+            <button className="btn secondary" disabled={busy("backup")} onClick={() => { void runAction("backup", props.onDownloadBackupAction); }}>
+              {busy("backup") ? <><InlineSpinner /> Exporting…</> : <><Download size={14} /> Download backup</>}
+            </button></div>
           <div className="data-row"><div><b>Restore from backup</b><span>Replaces the records, imports, profile and preferences in your signed-in Supabase workspace.</span></div>
-            <button className="btn secondary" onClick={() => restoreRef.current?.click()}><Upload size={14} /> Choose backup file</button>
-            <input ref={restoreRef} type="file" accept=".json,application/json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) props.onRestoreBackupAction(f); if (restoreRef.current) restoreRef.current.value = ""; }} /></div>
+            <button className="btn secondary" disabled={busy("restore")} onClick={() => restoreRef.current?.click()}>
+              {busy("restore") ? <><InlineSpinner /> Restoring…</> : <><Upload size={14} /> Choose backup file</>}
+            </button>
+            <input ref={restoreRef} type="file" accept=".json,application/json" style={{ display: "none" }} onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void runAction("restore", () => props.onRestoreBackupAction(file));
+              if (restoreRef.current) restoreRef.current.value = "";
+            }} /></div>
         </div>
       </section>
 
@@ -133,11 +165,16 @@ export default function SettingsPage(props: Props) {
         <PanelHead title="Account" subtitle="Session and danger zone" />
         <div className="settings-body">
           <div className="data-row"><div><b>Sign out</b><span>You can sign back in with the same email to see your data again.</span></div>
-            <button className="btn secondary" onClick={props.onSignOutAction}><LogOut size={14} /> Sign out</button></div>
+            <button className="btn secondary" disabled={busy("signOut")} onClick={() => { void runAction("signOut", props.onSignOutAction); }}>
+              {busy("signOut") ? <><InlineSpinner /> Signing out…</> : <><LogOut size={14} /> Sign out</>}
+            </button></div>
           <div className="data-row"><div><b>Delete all data</b><span>Removes every policy and import record from your workspace. Your profile and preferences stay. Download a backup first.</span></div>
-            <button className="btn secondary danger" onClick={props.onClearAllAction}><Trash2 size={14} /> Delete everything</button></div>
+            <button className="btn secondary danger" disabled={busy("delete")} onClick={() => { void runAction("delete", props.onClearAllAction); }}>
+              {busy("delete") ? <><InlineSpinner /> Deleting…</> : <><Trash2 size={14} /> Delete everything</>}
+            </button></div>
         </div>
       </section>
+      {actionError && <p className="settings-action-error" role="alert">{actionError}</p>}
     </div>
   );
 }

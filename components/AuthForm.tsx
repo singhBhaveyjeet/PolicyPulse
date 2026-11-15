@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Activity, ArrowLeft, ArrowRight, Clock3, FileSpreadsheet, ShieldCheck } from "lucide-react";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import styles from "./AuthForm.module.css";
+import { InlineSpinner } from "./Loading";
 
 type AuthFormProps = { mode: "login" | "signup" | "recover" | "reset-password" };
 
@@ -15,7 +16,8 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState<"form" | "google" | null>(null);
+  const [validatingReset, setValidatingReset] = useState(false);
   const [cursor, setCursor] = useState({ x: -180, y: -180 });
   const isSignup = mode === "signup";
   const isRecovery = mode === "recover";
@@ -29,16 +31,21 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
   useEffect(() => {
     if (!isReset || !isSupabaseConfigured()) return;
+    let active = true;
+    setValidatingReset(true);
     getSupabaseClient().auth.getUser().then(({ data, error: authError }) => {
-      if (authError || !data.user) setError("This password-reset link is invalid or has expired. Request a new one.");
-    }).catch((authError: unknown) => setError(authError instanceof Error ? authError.message : "Could not verify the reset link."));
+      if (active && (authError || !data.user)) setError("This password-reset link is invalid or has expired. Request a new one.");
+    }).catch((authError: unknown) => {
+      if (active) setError(authError instanceof Error ? authError.message : "Could not verify the reset link.");
+    }).finally(() => { if (active) setValidatingReset(false); });
+    return () => { active = false; };
   }, [isReset]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setNotice("");
-    setPending(true);
+    setPending("form");
 
     try {
       const supabase = getSupabaseClient();
@@ -52,7 +59,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         const { error: authError } = await supabase.auth.updateUser({ password });
         if (authError) throw authError;
         setNotice("Your password has been updated. Taking you to your workspace…");
-        window.setTimeout(() => router.replace("/dashboard"), 900);
+        router.replace("/dashboard");
       } else if (isSignup) {
         const { data, error: authError } = await supabase.auth.signUp({
           email,
@@ -70,14 +77,14 @@ export default function AuthForm({ mode }: AuthFormProps) {
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : "Authentication failed. Please try again.");
     } finally {
-      setPending(false);
+      setPending(null);
     }
   }
 
   async function signInWithGoogle() {
     setError("");
     setNotice("");
-    setPending(true);
+    setPending("google");
     try {
       const { error: authError } = await getSupabaseClient().auth.signInWithOAuth({
         provider: "google",
@@ -86,7 +93,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
       if (authError) throw authError;
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : "Google sign-in could not be started.");
-      setPending(false);
+      setPending(null);
     }
   }
 
@@ -165,16 +172,18 @@ export default function AuthForm({ mode }: AuthFormProps) {
             </label>}
             {error && <p className={styles.error} role="alert">{error}</p>}
             {notice && <p className={styles.notice} role="status">{notice}</p>}
+            {validatingReset && <p className={styles.notice} role="status"><InlineSpinner /> Verifying reset link…</p>}
             {!isSupabaseConfigured() && <p className={styles.error} role="alert">Supabase is not configured. Add your project URL and publishable key to <code>.env.local</code>, then restart the app.</p>}
-            <button type="submit" className={styles.submit} disabled={pending || !isSupabaseConfigured()}>
-              {pending ? "Please wait…" : isReset ? "Update password" : isRecovery ? "Send reset link" : isSignup ? "Create account" : "Sign in"} {!pending && <ArrowRight size={16} />}
+            <button type="submit" className={styles.submit} disabled={pending !== null || validatingReset || !isSupabaseConfigured()}>
+              {pending === "form" && <InlineSpinner />}
+              {pending === "form" ? "Please wait…" : isReset ? "Update password" : isRecovery ? "Send reset link" : isSignup ? "Create account" : "Sign in"} {!pending && <ArrowRight size={16} />}
             </button>
           </form>
 
           {(mode === "login" || mode === "signup") && <>
             <div className={styles.divider}><span>or</span></div>
-            <button type="button" className={styles.googleButton} onClick={signInWithGoogle} disabled={pending || !isSupabaseConfigured()}>
-              <span aria-hidden="true">G</span> Continue with Google
+            <button type="button" className={styles.googleButton} onClick={signInWithGoogle} disabled={pending !== null || !isSupabaseConfigured()}>
+              {pending === "google" && <InlineSpinner />}<span aria-hidden="true">G</span> {pending === "google" ? "Connecting to Google…" : "Continue with Google"}
             </button>
           </>}
 

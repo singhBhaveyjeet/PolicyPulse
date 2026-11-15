@@ -5,7 +5,7 @@ import {
   FileSpreadsheet, FileText, Gauge, LayoutDashboard, LifeBuoy, Lightbulb, LogOut, Mail, MessageCircle, Phone,
   Pencil, Plus, PlusCircle, Search, Settings as SettingsIcon, ShieldCheck, SlidersHorizontal, Trash2, Upload, Users, X, AlertTriangle,
 } from "lucide-react";
-import type { FollowUp, ImportRecord, Policy, Profile, QueueWindow, Settings, Theme } from "@/lib/types";
+import type { FollowUp, ImportRecord, Policy, Profile, QueueWindow, Settings, Theme, Workspace } from "@/lib/types";
 import { loadWorkspace, saveWorkspace } from "@/lib/storage";
 import { downloadJSON, downloadTemplate, exportPolicies } from "@/lib/importer";
 import { DEFAULT_SETTINGS, EMPTY_PROFILE, mergeProfile, mergeSettings } from "@/lib/settings";
@@ -15,6 +15,7 @@ import {
 } from "@/lib/analysis";
 import { cleanPhone, textKey } from "@/lib/normalize";
 import ImportModal, { type ImportSummary } from "./ImportModal";
+import { InlineSpinner, WorkspaceSkeleton } from "./Loading";
 import { AreaChart } from "./charts";
 import AnalyticsDashboard from "./AnalyticsDashboard";
 import BusinessAnalyticsDashboard from "./BusinessAnalyticsDashboard";
@@ -42,7 +43,7 @@ type Toast = { id: number; msg: string; tone: "ok" | "error" };
 const prettyName = (email: string) =>
   (email.split("@")[0] || "there").replace(/[._-]+/g, " ").replace(/\w\S*/g, (w) => w[0].toUpperCase() + w.slice(1));
 
-export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: { userId: string; userEmail: string; onSignOutAction: () => void }) {
+export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: { userId: string; userEmail: string; onSignOutAction: () => Promise<void> }) {
   // ---- workspace (saved to the signed-in Supabase account) ----
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [imports, setImports] = useState<ImportRecord[]>([]);
@@ -54,6 +55,15 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
   const [loadError, setLoadError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [savedAt, setSavedAt] = useState("");
+  const [syncCount, setSyncCount] = useState(0);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [exportCount, setExportCount] = useState(0);
+  const [savingPolicyIds, setSavingPolicyIds] = useState<string[]>([]);
+  const [deletingPolicyId, setDeletingPolicyId] = useState("");
+  const [savingNoteId, setSavingNoteId] = useState("");
+  const [deletingAll, setDeletingAll] = useState(false);
+  const [removingImportIds, setRemovingImportIds] = useState<string[]>([]);
+  const [signingOut, setSigningOut] = useState(false);
   const [priorityToday, setPriorityToday] = useState(() => new Date());
 
   // ---- view state ----
@@ -73,9 +83,16 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [banner, setBanner] = useState<ImportSummary | null>(null);
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const workspaceRef = useRef<Workspace>({ policies, imports, profile, settings });
+  const lastSavedWorkspaceRef = useRef<Workspace | null>(null);
+  const workspaceWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const syncing = syncCount > 0;
 
   useEffect(() => {
     let alive = true;
+    setLoaded(false);
+    setLoadError("");
     loadWorkspace(userId)
       .then((ws) => {
         if (!alive) return;
@@ -88,17 +105,78 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
       })
       .finally(() => { if (alive) setLoaded(true); });
     return () => { alive = false; };
-  }, [userId]);
+  }, [userId, loadAttempt]);
+
+  useEffect(() => {
+    workspaceRef.current = { policies, imports, profile, settings };
+  }, [policies, imports, profile, settings]);
 
   useEffect(() => {
     if (!loaded || loadError) return;
+    const savedWorkspace = lastSavedWorkspaceRef.current;
+    if (savedWorkspace && savedWorkspace.policies === policies && savedWorkspace.imports === imports &&
+      savedWorkspace.profile === profile && savedWorkspace.settings === settings) {
+      lastSavedWorkspaceRef.current = null;
+      return;
+    }
+    lastSavedWorkspaceRef.current = null;
     const t = setTimeout(() => {
+      setSyncCount((count) => count + 1);
       saveWorkspace(userId, { policies, imports, profile, settings })
         .then(() => { setSaveError(""); setSavedAt(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })); })
-        .catch((error: unknown) => setSaveError(error instanceof Error ? error.message : "Could not save your Supabase workspace. Export a backup to keep a copy."));
+        .catch((error: unknown) => setSaveError(error instanceof Error ? error.message : "Could not save your Supabase workspace. Export a backup to keep a copy."))
+        .finally(() => setSyncCount((count) => Math.max(0, count - 1)));
     }, 400);
+    saveTimer.current = t;
     return () => clearTimeout(t);
   }, [policies, imports, profile, settings, loaded, loadError, userId]);
+
+  async function persistWorkspace(workspace: Workspace): Promise<void> {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    setSyncCount((count) => count + 1);
+    setSaveError("");
+    try {
+      await saveWorkspace(userId, workspace);
+      workspaceRef.current = workspace;
+      lastSavedWorkspaceRef.current = workspace;
+      setSavedAt(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not save your Supabase workspace.";
+      setSaveError(message);
+      throw new Error(message);
+    } finally {
+      setSyncCount((count) => Math.max(0, count - 1));
+    }
+  }
+
+  function updateWorkspace(update: (current: Workspace) => Workspace): Promise<Workspace> {
+    const operation = workspaceWriteQueueRef.current.then(async () => {
+      const next = update(workspaceRef.current);
+      await persistWorkspace(next);
+      workspaceRef.current = next;
+      setPolicies(next.policies);
+      setImports(next.imports);
+      setProfile(next.profile ?? EMPTY_PROFILE);
+      setSettings(next.settings ?? DEFAULT_SETTINGS);
+      return next;
+    });
+    workspaceWriteQueueRef.current = operation.then(() => undefined, () => undefined);
+    return operation;
+  }
+
+  async function retryWorkspaceSave() {
+    try {
+      await updateWorkspace((current) => current);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not save your workspace.", "error");
+    }
+  }
+
+  function retryWorkspaceLoad() {
+    setLoadError("");
+    setLoaded(false);
+    setLoadAttempt((attempt) => attempt + 1);
+  }
 
   useEffect(() => { setPageNum(1); }, [search, insurerF, typeF, statusF, followF, sortBy, page]);
   useEffect(() => { setCustomerLimit(60); }, [search, page]);
@@ -118,6 +196,10 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
     };
     refreshAtMidnight();
     return () => clearTimeout(timer);
+  }, []);
+  useEffect(() => () => {
+    if (noteTimer.current) clearTimeout(noteTimer.current);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
   }, []);
 
   // ---- analysis ----
@@ -183,42 +265,105 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
   const urgentCount = open.filter((p) => daysLeft(p.expiryDate, priorityToday) <= 5).length;
 
   // ---- actions ----
-  function patchPolicy(id: string, change: Partial<Policy>) {
-    setPolicies((prev) => prev.map((p) => (p.id === id ? { ...p, ...change } : p)));
+  async function setFollowUp(id: string, followUp: FollowUp) {
+    if (savingPolicyIds.includes(id)) return;
+    setSavingPolicyIds((current) => [...current, id]);
+    try {
+      await updateWorkspace((current) => ({
+        ...current,
+        policies: current.policies.map((policy) => policy.id === id ? { ...policy, followUp } : policy),
+      }));
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not update the renewal status.", "error");
+    } finally {
+      setSavingPolicyIds((current) => current.filter((policyId) => policyId !== id));
+    }
   }
-  function setFollowUp(id: string, v: FollowUp) { patchPolicy(id, { followUp: v }); }
   function saveNote(id: string, note: string) {
     if (noteTimer.current) clearTimeout(noteTimer.current);
-    noteTimer.current = setTimeout(() => patchPolicy(id, { note }), 300);
+    setSavingNoteId(id);
+    noteTimer.current = setTimeout(() => {
+      void (async () => {
+        try {
+        await updateWorkspace((current) => ({
+          ...current,
+          policies: current.policies.map((policy) => policy.id === id ? { ...policy, note } : policy),
+        }));
+        } catch (error) {
+          notify(error instanceof Error ? error.message : "Could not save the policy note.", "error");
+        } finally {
+          setSavingNoteId("");
+        }
+      })();
+    }, 350);
   }
-  function deletePolicy(p: Policy) {
+  async function deletePolicy(p: Policy) {
     if (!window.confirm(`Delete ${p.customerName}'s policy ${p.policyNumber}? This cannot be undone.`)) return;
-    setPolicies((prev) => prev.filter((x) => x.id !== p.id));
-    setSelectedId(null);
+    setDeletingPolicyId(p.id);
+    try {
+      await updateWorkspace((current) => ({ ...current, policies: current.policies.filter((policy) => policy.id !== p.id) }));
+      setSelectedId(null);
+      notify(`Deleted ${p.customerName}'s policy.`);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not delete the policy.", "error");
+    } finally {
+      setDeletingPolicyId("");
+    }
   }
-    function deleteCustomer(name: string, ids: string[]) {
+  async function deleteCustomer(name: string, ids: string[]) {
     const n = ids.length;
     if (!window.confirm(`Delete ${name} and ${n === 1 ? "their 1 policy" : `all ${n} of their policies`}? This cannot be undone.`)) return;
     const gone = new Set(ids);
-    setPolicies((prev) => prev.filter((p) => !gone.has(p.id)));
-    setSelectedId(null);
-    notify(`Deleted ${name} and ${n} ${n === 1 ? "policy" : "policies"}.`);
+    setDeletingPolicyId(ids.find((id) => id === selectedId) ?? ids[0] ?? "");
+    try {
+      await updateWorkspace((current) => ({ ...current, policies: current.policies.filter((policy) => !gone.has(policy.id)) }));
+      setSelectedId(null);
+      notify(`Deleted ${name} and ${n} ${n === 1 ? "policy" : "policies"}.`);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : `Could not delete ${name}'s policies.`, "error");
+    } finally {
+      setDeletingPolicyId("");
+    }
   }
-  function removeImport(rec: ImportRecord) {
+  async function removeImport(rec: ImportRecord) {
+    if (removingImportIds.includes(rec.id)) return;
     const n = policies.filter((p) => p.importId === rec.id).length;
     if (!window.confirm(`Remove the ${n} records last imported from ${rec.fileName} (${rec.sheetName})? This cannot be undone.`)) return;
-    setPolicies((prev) => prev.filter((p) => p.importId !== rec.id));
-    setImports((prev) => prev.filter((r) => r.id !== rec.id));
+    setRemovingImportIds((current) => [...current, rec.id]);
+    try {
+      await updateWorkspace((current) => ({
+        ...current,
+        policies: current.policies.filter((policy) => policy.importId !== rec.id),
+        imports: current.imports.filter((record) => record.id !== rec.id),
+      }));
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not remove the imported records.", "error");
+    } finally {
+      setRemovingImportIds((current) => current.filter((id) => id !== rec.id));
+    }
   }
-  function clearAll() {
-    if (!window.confirm("Delete ALL policies and import history from this browser? Download a backup or Excel file first if you need one.")) return;
-    setPolicies([]); setImports([]); setBanner(null); setPage("Overview"); notify("All data deleted from this browser.");
+  async function clearAll() {
+    if (!window.confirm("Delete ALL policies and import history from your workspace? Download a backup or Excel file first if you need one.")) return;
+    setDeletingAll(true);
+    try {
+      await updateWorkspace((current) => ({ ...current, policies: [], imports: [] }));
+      setBanner(null); setPage("Overview");
+      notify("All policy and import data deleted from your workspace.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Could not delete your workspace data.", "error");
+    } finally {
+      setDeletingAll(false);
+    }
   }
-  function onImported(next: Policy[], records: ImportRecord[], summary: ImportSummary) {
-    setPolicies(next);
-    setImports((prev) => [...records.reverse(), ...prev]);
+  async function signOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    try { await onSignOutAction(); }
+    finally { setSigningOut(false); }
+  }
+  async function onImported(next: Policy[], records: ImportRecord[], summary: ImportSummary) {
+    await updateWorkspace((current) => ({ ...current, policies: next, imports: [...records].reverse().concat(current.imports) }));
     setBanner(summary);
-    setShowImport(false);
     setPage("Overview");
     setSearch(""); setInsurerF("All insurers"); setTypeF("All types"); setStatusF("All statuses"); setFollowF("All follow-ups");
   }
@@ -228,55 +373,83 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200);
   }
   async function saveOnboardingProfile(nextProfile: Profile) {
-    try {
-      await saveWorkspace(userId, { policies, imports, profile: nextProfile, settings });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not save your workspace.";
-      setSaveError(message);
-      throw new Error(message);
-    }
-    setProfile(nextProfile);
-    setSaveError("");
-    setSavedAt(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }));
+    await updateWorkspace((current) => ({ ...current, profile: nextProfile }));
   }
   const stamp = () => new Date().toISOString().slice(0, 10);
   const fileBase = () => `PolicyPulse_${(profile.agency || profile.name || "policies").trim().replace(/[^\w]+/g, "-").replace(/^-|-$/g, "") || "policies"}`;
-  function exportRows(list: Policy[], name?: string) {
+  async function exportRows(list: Policy[], name?: string) {
     if (!list.length) { notify("There are no policies to download yet.", "error"); return; }
-    exportPolicies(list, (p) => (isOpen(p) ? statusOf(p) : FOLLOW_UP_LABEL[p.followUp]), name ?? `${fileBase()}_${stamp()}.xlsx`);
-    notify(`Downloaded ${list.length.toLocaleString("en-IN")} policies as Excel.`);
+    setExportCount((count) => count + 1);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    try {
+      exportPolicies(list, (p) => (isOpen(p) ? statusOf(p) : FOLLOW_UP_LABEL[p.followUp]), name ?? `${fileBase()}_${stamp()}.xlsx`);
+      notify(`Downloaded ${list.length.toLocaleString("en-IN")} policies as Excel.`);
+    } catch (error) {
+      notify(error instanceof Error ? `Could not export policies: ${error.message}` : "Could not export policies.", "error");
+    } finally {
+      setExportCount((count) => Math.max(0, count - 1));
+    }
   }
-  function savePolicy(p: Policy) {
+  async function savePolicy(p: Policy) {
     const isEdit = policies.some((x) => x.id === p.id);
-    setPolicies((prev) => (isEdit ? prev.map((x) => (x.id === p.id ? p : x)) : [p, ...prev]));
-    setForm(null);
-    notify(isEdit ? `Saved changes to ${p.customerName}'s policy.` : `Added ${p.customerName}'s policy. Your analysis is updated.`);
-    if (!isEdit) { setBanner(null); setSelectedId(p.id); }
+    if (savingPolicyIds.includes(p.id)) return;
+    setSavingPolicyIds((current) => [...current, p.id]);
+    try {
+      await updateWorkspace((current) => ({
+        ...current,
+        policies: current.policies.some((policy) => policy.id === p.id)
+          ? current.policies.map((policy) => policy.id === p.id ? p : policy)
+          : [p, ...current.policies],
+      }));
+      setForm(null);
+      notify(isEdit ? `Saved changes to ${p.customerName}'s policy.` : `Added ${p.customerName}'s policy. Your analysis is updated.`);
+      if (!isEdit) { setBanner(null); setSelectedId(p.id); }
+    } finally {
+      setSavingPolicyIds((current) => current.filter((id) => id !== p.id));
+    }
   }
-  function downloadBackup() {
-    downloadJSON({ app: "PolicyPulse", version: 2, exportedAt: new Date().toISOString(), policies, imports, profile, settings }, `${fileBase()}_backup_${stamp()}.json`);
-    notify("Backup downloaded. Keep the file somewhere safe.");
+  async function downloadBackup() {
+    setExportCount((count) => count + 1);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    try {
+      downloadJSON({ app: "PolicyPulse", version: 2, exportedAt: new Date().toISOString(), policies, imports, profile, settings }, `${fileBase()}_backup_${stamp()}.json`);
+      notify("Backup downloaded. Keep the file somewhere safe.");
+    } catch (error) {
+      notify(error instanceof Error ? `Could not download backup: ${error.message}` : "Could not download the backup.", "error");
+    } finally {
+      setExportCount((count) => Math.max(0, count - 1));
+    }
   }
   async function restoreBackup(file: File) {
+    let data: { app?: string; policies?: Policy[]; imports?: ImportRecord[]; profile?: Profile; settings?: Settings };
     try {
-      const data = JSON.parse(await file.text());
-      const ok = data && data.app === "PolicyPulse" && Array.isArray(data.policies) &&
-        data.policies.every((p: Policy) => p && typeof p.id === "string" && typeof p.customerName === "string" && typeof p.policyNumber === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.expiryDate));
-      if (!ok) { notify("That does not look like a PolicyPulse backup file.", "error"); return; }
+      data = JSON.parse(await file.text()) as typeof data;
+      if (!data || data.app !== "PolicyPulse" || !Array.isArray(data.policies) ||
+        !data.policies.every((p: Policy) => p && typeof p.id === "string" && typeof p.customerName === "string" && typeof p.policyNumber === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.expiryDate))) {
+        notify("That does not look like a PolicyPulse backup file.", "error");
+        return;
+      }
       if (!window.confirm(`Replace your Supabase workspace with this backup (${data.policies.length} policies)?`)) return;
-      setPolicies(data.policies);
-      setImports(Array.isArray(data.imports) ? data.imports : []);
-      setProfile({ ...mergeProfile(data.profile), onboarded: true });
-      const st = mergeSettings(data.settings);
-      setSettings(st); setWindowF(st.defaultQueueWindow);
-      notify(`Restored ${data.policies.length.toLocaleString("en-IN")} policies from backup.`);
-    } catch { notify("That file could not be read as a backup.", "error"); }
+    } catch (error) {
+      notify(error instanceof Error ? `Could not read the backup: ${error.message}` : "That file could not be read as a backup.", "error");
+      return;
+    }
+    const nextPolicies = data.policies ?? [];
+    const nextImports = Array.isArray(data.imports) ? data.imports : [];
+    const nextProfile = { ...mergeProfile(data.profile), onboarded: true };
+    const nextSettings = mergeSettings(data.settings);
+    try {
+      await updateWorkspace(() => ({ policies: nextPolicies, imports: nextImports, profile: nextProfile, settings: nextSettings }));
+      setWindowF(nextSettings.defaultQueueWindow);
+      notify(`Restored ${nextPolicies.length.toLocaleString("en-IN")} policies from backup.`);
+    } catch (error) {
+      notify(error instanceof Error ? `Could not restore the backup: ${error.message}` : "Could not restore the backup.", "error");
+    }
   }
   const resetFilters = () => { setSearch(""); setInsurerF("All insurers"); setTypeF("All types"); setStatusF("All statuses"); setFollowF("All follow-ups"); };
   const openCustomer = (name: string, phone: string) => { setSearch(phone || name); setPage("Policy records"); };
 
-  if (loadError) return <main className="auth-loading" role="alert">{loadError} Apply the Supabase setup in the project README, then reload. Your existing cloud data has not been overwritten.</main>;
-  if (!loaded) return <main className="auth-loading" aria-live="polite">Opening your workspace…</main>;
+  if (!loaded || loadError) return <WorkspaceSkeleton message="Loading your insurance portfolio…" error={loadError || undefined} onRetryAction={retryWorkspaceLoad} />;
 
   if (!profile.onboarded) {
     return (
@@ -352,7 +525,7 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
         ))}
         <div className="side-bottom">
           <div className="help-card"><LifeBuoy size={18} /><b>Add or refresh data</b><p>Upload new files any time. Existing policies are matched by policy number, not duplicated.</p><button onClick={startImport}>Add files <ArrowRight size={13} /></button></div>
-          <div className="profile" role="button" tabIndex={0} title="Open settings" onClick={() => setPage("Settings")} onKeyDown={(e) => { if (e.key === "Enter") setPage("Settings"); }}><Avatar photo={profile.photo} name={userName} className="profile-avatar" /><div><b>{userName}</b><small>{userEmail}</small></div><button className="sign-out" onClick={(e) => { e.stopPropagation(); onSignOutAction(); }} aria-label="Sign out"><LogOut size={16} /></button></div>
+          <div className="profile" role="button" tabIndex={0} title="Open settings" onClick={() => setPage("Settings")} onKeyDown={(e) => { if (e.key === "Enter") setPage("Settings"); }}><Avatar photo={profile.photo} name={userName} className="profile-avatar" /><div><b>{userName}</b><small>{userEmail}</small></div><button className="sign-out" onClick={(e) => { e.stopPropagation(); void signOut(); }} aria-label="Sign out" disabled={signingOut}>{signingOut ? <InlineSpinner /> : <LogOut size={16} />}</button></div>
         </div>
       </aside>
 
@@ -360,14 +533,16 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
         <header className="topbar">
           <div className="crumb">Workspace <ChevronRight size={14} /><b>{page}</b></div>
           <div className="top-actions">
-            <span className="demo-tag" title="Your records are saved to your authenticated Supabase workspace"><i /> {saveError ? "NOT SAVED" : savedAt ? `SYNCED · ${savedAt}` : "SUPABASE WORKSPACE"}</span>
+            <span className={`demo-tag ${syncing ? "syncing" : ""}`} title={saveError || "Your records are saved to your authenticated Supabase workspace"} aria-live="polite">
+              {syncing ? <><InlineSpinner /> SYNCING</> : <><i /> {saveError ? "NOT SAVED" : savedAt ? `SYNCED · ${savedAt}` : "SUPABASE WORKSPACE"}</>}
+            </span>
             <button className="icon-button" aria-label="Urgent renewals" onClick={() => setPage("Renewal action center")}><Bell size={17} />{urgentCount > 0 && <i />}</button>
             <button className="avatar-btn" onClick={() => setPage("Settings")} aria-label="Open settings"><Avatar photo={profile.photo} name={userName} className="top-avatar" /></button>
-            <button className="sign-out top-sign-out" onClick={onSignOutAction} aria-label="Sign out"><LogOut size={15} /></button>
+            <button className="sign-out top-sign-out" onClick={() => { void signOut(); }} aria-label="Sign out" disabled={signingOut}>{signingOut ? <InlineSpinner /> : <LogOut size={15} />}</button>
           </div>
         </header>
 
-        <div className="content">
+        <div className="content page-transition" key={page}>
           <section className="welcome">
             <div>
               <div className="eyebrow"><span /> {todayLabel}</div>
@@ -375,13 +550,15 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
               <p>{subtitle[page]}</p>
             </div>
             <div className="welcome-actions">
-              {!empty && <button className="btn secondary" onClick={() => exportRows(page === "Policy records" ? filtered : policies)}><Download size={15} /> {page === "Policy records" ? "Download view (Excel)" : "Download Excel"}</button>}
+              {!empty && <button className="btn secondary" disabled={exportCount > 0} onClick={() => { void exportRows(page === "Policy records" ? filtered : policies); }}>
+                {exportCount ? <><InlineSpinner /> Exporting…</> : <><Download size={15} /> {page === "Policy records" ? "Download view (Excel)" : "Download Excel"}</>}
+              </button>}
               <button className="btn secondary" onClick={() => setForm({ editing: null })}><PlusCircle size={15} /> Add policy</button>
               <button className="btn primary" onClick={startImport}><Plus size={16} /> Add files</button>
             </div>
           </section>
 
-          {saveError && <div className="import-warning"><AlertTriangle size={15} />{saveError}</div>}
+          {saveError && <div className="import-warning"><AlertTriangle size={15} /><span>{saveError}</span><button className="text-action" disabled={syncing} onClick={() => { void retryWorkspaceSave(); }}>{syncing ? <><InlineSpinner /> Retrying…</> : "Retry save"}</button></div>}
 
           {banner && (
             <div className="success-banner">
@@ -442,7 +619,9 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
                         <div className="priority-premium"><small>Premium</small><b>{policy.premium ? money(policy.premium) : "—"}</b></div>
                         <div className="priority-followup">
                           <span className={`priority-followup-status ${policy.followUp}`}>{FOLLOW_UP_LABEL[policy.followUp]}</span>
-                          {policy.followUp === "pending" && <button className="priority-contact" onClick={() => setFollowUp(policy.id, "contacted")}>Mark contacted</button>}
+                          {policy.followUp === "pending" && <button className="priority-contact" disabled={savingPolicyIds.includes(policy.id)} onClick={() => { void setFollowUp(policy.id, "contacted"); }}>
+                            {savingPolicyIds.includes(policy.id) ? <><InlineSpinner /> Updating…</> : "Mark contacted"}
+                          </button>}
                         </div>
                         <div className="priority-actions">
                           {phoneKey ? <a className="action-btn" href={`tel:${phoneKey}`} title="Call customer" aria-label={`Call ${policy.customerName}`}><Phone size={14} /></a> : <span className="action-btn off" title="No phone number"><Phone size={14} /></span>}
@@ -529,11 +708,19 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
             <SettingsPage
               key={JSON.stringify([profile, { ...settings, theme: "" }])}
               userEmail={userEmail} profile={profile} settings={settings} policies={policies}
-              onSaveProfileAction={(p) => { setProfile(p); notify("Profile saved."); }}
-              onSaveSettingsAction={(st) => { setSettings((prev) => ({ ...st, theme: prev.theme })); setWindowF(st.defaultQueueWindow); notify("Preferences saved."); }}
+              onSaveProfileAction={async (p) => {
+                await updateWorkspace((current) => ({ ...current, profile: p }));
+                notify("Profile saved.");
+              }}
+              onSaveSettingsAction={async (st) => {
+                const nextSettings = { ...st, theme: settings.theme };
+                await updateWorkspace((current) => ({ ...current, settings: { ...nextSettings, theme: current.settings?.theme ?? nextSettings.theme } }));
+                setWindowF(nextSettings.defaultQueueWindow);
+                notify("Preferences saved.");
+              }}
               onThemeChangeAction={(t) => setSettings((prev) => ({ ...prev, theme: t }))}
               onDownloadExcelAction={() => exportRows(policies)} onDownloadBackupAction={downloadBackup} onRestoreBackupAction={restoreBackup}
-              onClearAllAction={clearAll} onSignOutAction={onSignOutAction} notifyAction={notify}
+              onClearAllAction={clearAll} onSignOutAction={signOut} notifyAction={notify}
             />
           )}
 
@@ -589,14 +776,20 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
                   <div className="history-row" key={x.id}>
                     <div className="file-icon"><FileSpreadsheet size={17} /></div>
                     <div className="import-copy"><b>{x.fileName} <small>· {x.sheetName}</small></b><span>{x.added} new · {x.updated} updated · {x.unchanged} unchanged{x.rejected ? ` · ${x.rejected} skipped` : ""} · {new Date(x.importedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span></div>
-                    <button className="btn secondary small-btn" disabled={!live} onClick={() => removeImport(x)}><Trash2 size={13} /> Remove {live} records</button>
+                    <button className="btn secondary small-btn" disabled={!live || removingImportIds.includes(x.id)} onClick={() => { void removeImport(x); }}>
+                      {removingImportIds.includes(x.id) ? <><InlineSpinner /> Removing…</> : <><Trash2 size={13} /> Remove {live} records</>}
+                    </button>
                   </div>
                 );
               })}
               <div className="danger-zone">
                 <div><b>Your data</b><span>Policies and import history are stored in your signed-in Supabase workspace. Download a backup before deleting records or switching projects.</span></div>
-                <button className="btn secondary" disabled={empty} onClick={() => exportRows(policies)}><Download size={14} /> Download Excel</button>
-                <button className="btn secondary danger" disabled={empty} onClick={clearAll}><Trash2 size={14} /> Delete all data</button>
+                <button className="btn secondary" disabled={empty || exportCount > 0} onClick={() => { void exportRows(policies); }}>
+                  {exportCount ? <><InlineSpinner /> Exporting…</> : <><Download size={14} /> Download Excel</>}
+                </button>
+                <button className="btn secondary danger" disabled={empty || deletingAll} onClick={() => { void clearAll(); }}>
+                  {deletingAll ? <><InlineSpinner /> Deleting…</> : <><Trash2 size={14} /> Delete all data</>}
+                </button>
               </div>
             </section>
           )}
@@ -604,7 +797,11 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
           {/* ---------------- RENEWAL ACTION CENTER ---------------- */}
           {page === "Renewal action center" && (empty ? emptyState : (
             <section className="panel directory">
-              <PanelHead title="Priority renewal queue" subtitle="Call, message and mark each renewal as you go. Closed items leave the queue." action={<button className="btn secondary" onClick={() => exportRows(queue, "renewal-queue.xlsx")}><Download size={14} /> Export</button>} />
+              <PanelHead title="Priority renewal queue" subtitle="Call, message and mark each renewal as you go. Closed items leave the queue." action={
+                <button className="btn secondary" disabled={exportCount > 0} onClick={() => { void exportRows(queue, "renewal-queue.xlsx"); }}>
+                  {exportCount ? <><InlineSpinner /> Exporting…</> : <><Download size={14} /> Export</>}
+                </button>
+              } />
               <div className="chips queue-chips">
                 {([["overdue", "Overdue"], ["7", "Next 7 days"], ["14", "Next 14 days"], ["30", "Next 30 days"], ["60", "Next 60 days"]] as [Window, string][]).map(([k, label]) => (
                   <button key={k} className={`chip-btn ${windowF === k ? "active" : ""} ${k === "overdue" ? "late" : ""}`} onClick={() => setWindowF(k)}>{label} <b>{queueCounts[k]}</b></button>
@@ -631,9 +828,10 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
                         {phoneKey ? <a className="action-btn" href={`tel:${phoneKey}`} title="Call"><Phone size={14} /></a> : <span className="action-btn off" title="No phone"><Phone size={14} /></span>}
                         {wa ? <a className="action-btn" href={wa} target="_blank" rel="noreferrer" title="WhatsApp"><MessageCircle size={14} /></a> : <span className="action-btn off" title="No valid mobile"><MessageCircle size={14} /></span>}
                         {p.email ? <a className="action-btn" href={`mailto:${p.email}?subject=${encodeURIComponent(`Policy ${p.policyNumber} renewal`)}`} title="Email"><Mail size={14} /></a> : <span className="action-btn off" title="No email"><Mail size={14} /></span>}
-                        <select className="followup-select" value={p.followUp} onChange={(e) => setFollowUp(p.id, e.target.value as FollowUp)} aria-label="Follow-up status">
+                        <select className="followup-select" value={p.followUp} disabled={savingPolicyIds.includes(p.id)} onChange={(e) => { void setFollowUp(p.id, e.target.value as FollowUp); }} aria-label="Follow-up status">
                           {FOLLOW_UP_ORDER.map((k) => <option key={k} value={k}>{FOLLOW_UP_LABEL[k]}</option>)}
                         </select>
+                        {savingPolicyIds.includes(p.id) && <InlineSpinner label="Updating renewal status" />}
                       </div>
                     </div>
                   );
@@ -647,7 +845,9 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
           {/* ---------------- POLICY RECORDS ---------------- */}
           {page === "Policy records" && (empty ? emptyState : (
             <section className="panel directory">
-              <PanelHead title="All policy records" subtitle="Search, filter and inspect source records across your files." action={<button className="btn secondary" onClick={() => exportRows(filtered)}><Download size={14} /> Export</button>} />
+              <PanelHead title="All policy records" subtitle="Search, filter and inspect source records across your files." action={<button className="btn secondary" disabled={exportCount > 0} onClick={() => { void exportRows(filtered); }}>
+                {exportCount ? <><InlineSpinner /> Exporting…</> : <><Download size={14} /> Export</>}
+              </button>} />
               <div className="toolbar">
                 <div className="search"><Search size={15} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, phone, policy number…" /></div>
                 <select value={insurerF} onChange={(e) => setInsurerF(e.target.value)}><option>All insurers</option>{insurerNames.map((i) => <option key={i}>{i}</option>)}</select>
@@ -691,12 +891,14 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
                 {selected.email ? <a className="btn secondary" href={`mailto:${selected.email}`}><Mail size={13} /> Email</a> : null}
               </div>
               <label className="field-label">Status
-                <select value={selected.followUp} onChange={(e) => setFollowUp(selected.id, e.target.value as FollowUp)}>
+                <select value={selected.followUp} disabled={savingPolicyIds.includes(selected.id)} onChange={(e) => { void setFollowUp(selected.id, e.target.value as FollowUp); }}>
                   {FOLLOW_UP_ORDER.map((k) => <option key={k} value={k}>{FOLLOW_UP_LABEL[k]}</option>)}
                 </select>
+                {savingPolicyIds.includes(selected.id) && <InlineSpinner label="Updating renewal status" />}
               </label>
               <label className="field-label">Notes
                 <textarea key={selected.id} defaultValue={selected.note} rows={3} placeholder="e.g. Asked to call back after Diwali" onChange={(e) => saveNote(selected.id, e.target.value)} />
+                {savingNoteId === selected.id && <small className="note-saving"><InlineSpinner /> Saving note…</small>}
               </label>
             </div>
 
@@ -727,8 +929,12 @@ export default function PolicyPulseApp({ userId, userEmail, onSignOutAction }: {
             })()}
 
             <div className="drawer-actions">
-              <button className="btn secondary danger" onClick={() => deletePolicy(selected)}><Trash2 size={14} /> Delete policy</button>
-              <button className="btn secondary danger" onClick={() => deleteCustomer(selected.customerName, policies.filter((p) => customerKey(p) === customerKey(selected)).map((p) => p.id))}><Trash2 size={14} /> Delete customer</button>
+              <button className="btn secondary danger" disabled={deletingPolicyId === selected.id} onClick={() => { void deletePolicy(selected); }}>
+                {deletingPolicyId === selected.id ? <><InlineSpinner /> Deleting…</> : <><Trash2 size={14} /> Delete policy</>}
+              </button>
+              <button className="btn secondary danger" disabled={deletingPolicyId === selected.id} onClick={() => { void deleteCustomer(selected.customerName, policies.filter((p) => customerKey(p) === customerKey(selected)).map((p) => p.id)); }}>
+                {deletingPolicyId === selected.id ? <><InlineSpinner /> Deleting…</> : <><Trash2 size={14} /> Delete customer</>}
+              </button>
               <button className="btn secondary" onClick={() => setForm({ editing: selected })}><Pencil size={14} /> Edit</button>
               <button className="btn primary" onClick={() => setSelectedId(null)}>Done</button>
             </div>

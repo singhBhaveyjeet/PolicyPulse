@@ -5,11 +5,12 @@ import type { FollowUp, Policy } from "@/lib/types";
 import { newId, todayISO } from "@/lib/build";
 import { cleanEmail, cleanPhone, cleanText, makePolicyKey, normalizePolicyType, textKey, toISODate } from "@/lib/normalize";
 import { FOLLOW_UP_LABEL, FOLLOW_UP_ORDER } from "@/lib/analysis";
+import { InlineSpinner } from "./Loading";
 
 type Props = {
   editing: Policy | null; // null = add a new policy
   existing: Policy[];
-  onSaveAction: (p: Policy) => void;
+  onSaveAction: (p: Policy) => Promise<void>;
   onCloseAction: () => void;
 };
 
@@ -30,6 +31,8 @@ export default function PolicyForm({ editing, existing, onSaveAction, onCloseAct
     note: editing?.note ?? "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const set = (k: keyof typeof f, v: string) => {
     setF((p) => ({ ...p, [k]: v }));
     setErrors((previous) => {
@@ -43,7 +46,8 @@ export default function PolicyForm({ editing, existing, onSaveAction, onCloseAct
   const insurerOptions = Array.from(new Set(existing.map((p) => p.insurer).filter((i) => i !== "Unassigned")));
   const typeOptions = Array.from(new Set([...COMMON_TYPES, ...existing.map((p) => p.policyType).filter((t) => t !== "Other")]));
 
-  function submit() {
+  async function submit() {
+    if (saving) return;
     const e: Record<string, string> = {};
     const name = cleanText(f.customerName);
     const number = cleanText(f.policyNumber);
@@ -77,7 +81,7 @@ export default function PolicyForm({ editing, existing, onSaveAction, onCloseAct
       id: newId("pol"), customerName: "", phone: "", email: "", policyNumber: "", insurer: "", policyType: "", startDate: "", expiryDate: "",
       premium: 0, sourceFile: "Added manually", sourceSheet: "Manual entry", sourceRow: 0, importedAt: todayISO(), importId: "manual", followUp: "pending", note: "",
     };
-    onSaveAction({
+    const policy: Policy = {
       ...base,
       customerName: name,
       phone: f.phone.trim() ? phone.display : "",
@@ -90,20 +94,29 @@ export default function PolicyForm({ editing, existing, onSaveAction, onCloseAct
       premium: Math.round(premium * 100) / 100,
       followUp: editing && expiry !== editing.expiryDate ? "pending" : f.followUp,
       note: f.note.trim(),
-    });
+    };
+    setSaving(true);
+    setSaveError("");
+    try {
+      await onSaveAction(policy);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not save this policy. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const err = (k: string) => (errors[k] ? <small className="field-error">{errors[k]}</small> : null);
 
   return (
-    <div className="modal-overlay" onClick={onCloseAction}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={() => { if (!saving) onCloseAction(); }}>
+      <div className="modal" aria-busy={saving} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div className="modal-title">
             <div className="hero-icon">{editing ? <Save size={20} /> : <PlusCircle size={20} />}</div>
             <div><h2>{editing ? "Edit policy" : "Add a new policy"}</h2><p>{editing ? "Changes are saved straight away and included in your next Excel download." : "Enter one policy by hand. It joins your data and your analysis instantly."}</p></div>
           </div>
-          <button className="icon-button" onClick={onCloseAction} aria-label="Close"><X size={18} /></button>
+          <button className="icon-button" onClick={onCloseAction} aria-label="Close" disabled={saving}><X size={18} /></button>
         </div>
 
         <div className="form-grid">
@@ -139,8 +152,11 @@ export default function PolicyForm({ editing, existing, onSaveAction, onCloseAct
         <div className="modal-footer">
           <span>Fields marked * are required</span>
           <div>
-            <button className="btn secondary" onClick={onCloseAction}>Cancel</button>
-            <button className="btn primary" onClick={submit}><Check size={14} /> {editing ? "Save changes" : "Add policy"}</button>
+            {saveError && <span className="form-save-error" role="alert">{saveError}</span>}
+            <button className="btn secondary" onClick={onCloseAction} disabled={saving}>Cancel</button>
+            <button className="btn primary" onClick={() => { void submit(); }} disabled={saving}>
+              {saving ? <><InlineSpinner /> Saving…</> : <><Check size={14} /> {editing ? "Save changes" : "Add policy"}</>}
+            </button>
           </div>
         </div>
       </div>

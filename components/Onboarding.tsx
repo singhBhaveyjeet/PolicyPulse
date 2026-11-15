@@ -6,6 +6,7 @@ import { SPECIALITIES } from "@/lib/settings";
 import { cleanPhone } from "@/lib/normalize";
 import { resizeImage } from "@/lib/image";
 import { Avatar, ThemePicker } from "./ui";
+import { InlineSpinner } from "./Loading";
 
 type Props = {
   userEmail: string;
@@ -101,7 +102,7 @@ export default function Onboarding({ userEmail, initial, theme, onThemeChangeAct
 
         <div className="onboard-actions">
           <button type="button" className="text-action" disabled={saving} onClick={() => { void finish(onSkipAction); }}>{saving ? "Saving…" : "Skip for now"}</button>
-          <button type="button" className="btn primary" disabled={saving} onClick={submit}>{saving ? "Saving…" : "Continue to dashboard"} <ArrowRight size={15} /></button>
+          <button type="button" className="btn primary" disabled={saving} onClick={submit}>{saving ? <><InlineSpinner /> Saving…</> : <>Continue to dashboard <ArrowRight size={15} /></>}</button>
         </div>
         {saveError && <p className="field-error" role="alert">{saveError}</p>}
         <p className="onboard-foot"><ShieldCheck size={12} /> Signed in as {userEmail}. Your workspace is saved to your private Supabase account.</p>
